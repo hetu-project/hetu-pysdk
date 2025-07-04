@@ -1,0 +1,6 @@
+version: v1
+plugins:
+  - name: python
+    out: ../hetu/extrinsics
+  - plugin: buf.build/grpc/python:v1.70.0
+    out: ../hetu/extrinsics
