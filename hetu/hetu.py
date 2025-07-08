@@ -414,3 +414,20 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.error(f"web3.eth.estimate_gas({to}) failed: {e}")
             return 0
+
+    def query_raw_checkpoint_list(self, grpc_endpoint: str, request) -> object:
+        """
+        Calls the RawCheckpointList gRPC method on the hetu.checkpointing.v1.Query service.
+        Args:
+            grpc_endpoint (str): gRPC server address, e.g. 'localhost:9090'.
+            request: QueryRawCheckpointListRequest protobuf message.
+        Returns:
+            QueryRawCheckpointListResponse protobuf message.
+        """
+        import grpc
+        from hetu.cosmos.hetu.checkpointing.v1 import query_pb2_grpc
+
+        with grpc.insecure_channel(grpc_endpoint) as channel:
+            stub = query_pb2_grpc.QueryStub(channel)
+            response = stub.RawCheckpointList(request)
+            return response

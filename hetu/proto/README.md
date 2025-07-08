@@ -10,5 +10,10 @@ After installing `buf`, you can generate the Python code by running the followin
 
 ```bash
 cd hetu/proto
+
+# only direct bussiness logic, recommended
+buf generate
+
+# all dependencies and imports will be included
 buf generate --include-imports
 ```
