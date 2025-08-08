@@ -1023,12 +1023,13 @@ class Hetutensor(HetutensorMixin):
     def get_subnets(self, block: Optional[int] = None) -> list[int]:
         """
         Returns a list of all subnet IDs using the subnet manager contract.
+        Skips netuid 0 (root subnet) and returns IDs starting from 1.
         
         Args:
             block (Optional[int]): The blockchain block number for the query.
             
         Returns:
-            list[int]: List of all subnet IDs.
+            list[int]: List of subnet IDs, starting from 1 up to and including total_subnets-1.
         """
         try:
             if not self.subnet_manager:
@@ -1036,18 +1037,18 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return []
             
-            # 获取总子网数
+            # Get total subnets
             total_subnets = self.get_total_subnets(block)
-            if total_subnets == 0:
+            if total_subnets <= 1:  # If only root subnet exists
                 if self.log_verbose:
-                    logging.info("No subnets found")
+                    logging.info("No non-root subnets found")
                 return []
             
-            # 返回从0到total_subnets-1的列表
-            subnet_ids = list(range(total_subnets))
+            # Return list from 1 to total_subnets (inclusive)
+            subnet_ids = list(range(1, total_subnets + 1))
             
             if self.log_verbose:
-                logging.info(f"Found {len(subnet_ids)} subnets: {subnet_ids}")
+                logging.info(f"Found {len(subnet_ids)} non-root subnets: {subnet_ids}")
             
             return subnet_ids
             
