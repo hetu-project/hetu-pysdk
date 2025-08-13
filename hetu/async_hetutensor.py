@@ -222,9 +222,6 @@ class AsyncHetutensor(HetutensorMixin):
     async def get_stake_for_hotkey(self, *args, **kwargs):
         return Balance(0)
 
-    async def get_subnet_info(self, *args, **kwargs):
-        return None
-
     async def get_subnets(self, *args, **kwargs):
         return []
 
@@ -248,7 +245,7 @@ class AsyncHetutensor(HetutensorMixin):
         except Exception as e:
             if self.log_verbose:
                 logging.error(f"Failed to get total subnets: {e}")
-            return 0
+        return 0
 
     async def get_subnet_info(self, netuid: int, block=None) -> Optional[EVMSubnetInfo]:
         """
@@ -266,8 +263,8 @@ class AsyncHetutensor(HetutensorMixin):
                 if self.log_verbose:
                     logging.error("Subnet manager contract not initialized")
                 return None
-            
-            # 调用合约的getSubnetDetails函数
+
+            # Call contract's getSubnetDetails function
             result = await self._contract_call(
                 self.subnet_manager,
                 "getSubnetDetails",
@@ -277,11 +274,11 @@ class AsyncHetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.info(f"Raw subnet details for netuid {netuid}: {result}")
             
-            # 解析返回的结果
+            # Parse returned results
             subnet_info_tuple = result[0]
             market_data = (result[1], result[2], result[3], result[4])
             
-            # 使用EVMSubnetInfo.from_contract_data创建对象
+            # Create object using EVMSubnetInfo.from_contract_data
             evm_subnet_info = EVMSubnetInfo.from_contract_data(subnet_info_tuple, market_data)
             
             if self.log_verbose:
@@ -316,7 +313,7 @@ class AsyncHetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return []
             
-            # 获取下一个netuid作为上限
+            # Get next netuid as upper limit
             next_netuid = await self.get_next_netuid(block)
             if self.log_verbose:
                 logging.info(f"Next netuid: {next_netuid}")
@@ -328,13 +325,13 @@ class AsyncHetutensor(HetutensorMixin):
             
             subnet_info_list = []
             
-            # 遍历从0到next_netuid-1的所有可能netuid
+            # Iterate through all possible netuids from 0 to next_netuid-1
             for netuid in range(next_netuid):
                 try:
                     if self.log_verbose:
                         logging.info(f"Checking netuid {netuid}...")
                     
-                    # 检查子网是否存在
+                    # Check if subnet exists
                     if await self.is_subnet_exists(netuid, block):
                         subnet_info = await self.get_subnet_info(netuid, block)
                         if subnet_info:
@@ -367,10 +364,10 @@ class AsyncHetutensor(HetutensorMixin):
 
     async def is_subnet_exists(self, netuid: int, block=None) -> bool:
         """
-        Checks if a subnet exists.
+        Checks if a subnet exists using the subnet manager contract.
         
         Args:
-            netuid (int): The subnet ID to check.
+            netuid (int): The unique identifier of the subnet.
             block (Optional[int]): The blockchain block number for the query.
             
         Returns:
@@ -382,17 +379,17 @@ class AsyncHetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return False
             
-            # 调用合约的subnetExists函数
-            exists = await self._contract_call(
+            # Call contract's subnetExists function
+            result = await self._contract_call(
                 self.subnet_manager,
                 "subnetExists",
                 [netuid]
             )
             
             if self.log_verbose:
-                logging.info(f"Subnet {netuid} exists: {exists}")
+                logging.info(f"Subnet {netuid} exists: {result}")
             
-            return exists
+            return result
             
         except Exception as e:
             if self.log_verbose:
@@ -401,22 +398,17 @@ class AsyncHetutensor(HetutensorMixin):
 
     async def is_subnet_active(self, netuid: int, block=None) -> bool:
         """
-        Checks if a subnet is active.
+        Checks if a subnet is active using the subnet manager contract.
         
         Args:
-            netuid (int): The subnet ID to check.
+            netuid (int): The unique identifier of the subnet.
             block (Optional[int]): The blockchain block number for the query.
             
         Returns:
             bool: True if the subnet is active, False otherwise.
         """
         try:
-            if not self.subnet_manager:
-                if self.log_verbose:
-                    logging.error("Subnet manager contract not initialized")
-                return False
-            
-            # 获取子网信息
+            # Get subnet info
             subnet_info = await self.get_subnet_info(netuid, block)
             if subnet_info:
                 is_active = subnet_info.is_active
@@ -435,14 +427,14 @@ class AsyncHetutensor(HetutensorMixin):
 
     async def get_user_subnets(self, user_address: str, block=None) -> list[int]:
         """
-        Returns a list of subnet IDs owned by a user.
+        Returns a list of subnet IDs that a user owns or participates in.
         
         Args:
-            user_address (str): The user's address.
+            user_address (str): The user's wallet address.
             block (Optional[int]): The blockchain block number for the query.
             
         Returns:
-            list[int]: List of subnet IDs owned by the user.
+            list[int]: List of subnet IDs.
         """
         try:
             if not self.subnet_manager:
@@ -450,17 +442,17 @@ class AsyncHetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return []
             
-            # 调用合约的getUserSubnets函数
-            subnets = await self._contract_call(
+            # Call contract's getUserSubnets function
+            result = await self._contract_call(
                 self.subnet_manager,
                 "getUserSubnets",
                 [user_address]
             )
             
             if self.log_verbose:
-                logging.info(f"User {user_address} subnets: {subnets}")
+                logging.info(f"User {user_address} subnets: {result}")
             
-            return list(subnets)
+            return result
             
         except Exception as e:
             if self.log_verbose:
@@ -469,10 +461,10 @@ class AsyncHetutensor(HetutensorMixin):
 
     async def get_subnet_params(self, netuid: int, block=None) -> Optional[dict]:
         """
-        Returns subnet parameters.
+        Returns subnet parameters for a given netuid.
         
         Args:
-            netuid (int): The subnet ID.
+            netuid (int): The unique identifier of the subnet.
             block (Optional[int]): The blockchain block number for the query.
             
         Returns:
@@ -484,7 +476,7 @@ class AsyncHetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return None
             
-            # 调用合约的getSubnetParams函数
+            # Call contract's getSubnetParams function
             result = await self._contract_call(
                 self.subnet_manager,
                 "getSubnetParams",
@@ -492,22 +484,18 @@ class AsyncHetutensor(HetutensorMixin):
             )
             
             if self.log_verbose:
-                logging.info(f"Raw subnet params for netuid {netuid}: {result}")
+                logging.info(f"Subnet {netuid} params: {result}")
             
-            # 解析参数
-            params = {
-                "min_stake": result[0],
-                "max_stake": result[1],
-                "stake_multiplier": result[2],
-                "emission_rate": result[3],
-                "target_validators": result[4]
-            }
-            
-            if self.log_verbose:
-                logging.info(f"Parsed subnet params: {params}")
-            
-            return params
-            
+            # Parse parameters
+            if result and len(result) >= 2:
+                params = {
+                    "min_lock": result[0],
+                    "rate_limit": result[1]
+                }
+                return params
+            else:
+                return None
+                
         except Exception as e:
             if self.log_verbose:
                 logging.error(f"Failed to get subnet params for netuid {netuid}: {e}")
@@ -515,10 +503,10 @@ class AsyncHetutensor(HetutensorMixin):
 
     async def get_subnet_hyperparams(self, netuid: int, block=None) -> Optional[dict]:
         """
-        Returns subnet hyperparameters.
+        Returns subnet hyperparameters for a given netuid.
         
         Args:
-            netuid (int): The subnet ID.
+            netuid (int): The unique identifier of the subnet.
             block (Optional[int]): The blockchain block number for the query.
             
         Returns:
@@ -530,7 +518,7 @@ class AsyncHetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return None
             
-            # 调用合约的getSubnetHyperparams函数
+            # Call contract's getSubnetHyperparams function
             result = await self._contract_call(
                 self.subnet_manager,
                 "getSubnetHyperparams",
@@ -538,25 +526,19 @@ class AsyncHetutensor(HetutensorMixin):
             )
             
             if self.log_verbose:
-                logging.info(f"Raw subnet hyperparams for netuid {netuid}: {result}")
+                logging.info(f"Subnet {netuid} hyperparams: {result}")
             
-            # 解析超参数
-            hyperparams = {
-                "immunity_period": result[0],
-                "min_allowed_weights": result[1],
-                "max_allowed_weights": result[2],
-                "max_weight_limit": result[3],
-                "scaling_law_power": result[4],
-                "synergy_scaling_law_power": result[5],
-                "subnetwork_n": result[6],
-                "max_allowed_validators": result[7]
-            }
-            
-            if self.log_verbose:
-                logging.info(f"Parsed subnet hyperparams: {hyperparams}")
-            
-            return hyperparams
-            
+            # Parse hyperparameters
+            if result and len(result) >= 3:
+                hyperparams = {
+                    "max_neurons": result[0],
+                    "max_validators": result[1],
+                    "min_stake": result[2]
+                }
+                return hyperparams
+            else:
+                return None
+                
         except Exception as e:
             if self.log_verbose:
                 logging.error(f"Failed to get subnet hyperparams for netuid {netuid}: {e}")
@@ -564,13 +546,13 @@ class AsyncHetutensor(HetutensorMixin):
 
     async def get_next_netuid(self, block=None) -> int:
         """
-        Returns the next available subnet ID.
+        Returns the next available netuid for subnet registration.
         
         Args:
             block (Optional[int]): The blockchain block number for the query.
             
         Returns:
-            int: The next available subnet ID.
+            int: The next available netuid.
         """
         try:
             if not self.subnet_manager:
@@ -578,17 +560,17 @@ class AsyncHetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return 0
             
-            # 调用合约的nextNetuid函数
-            next_netuid = await self._contract_call(
+            # Call contract's nextNetuid function
+            result = await self._contract_call(
                 self.subnet_manager,
                 "nextNetuid",
                 []
             )
             
             if self.log_verbose:
-                logging.info(f"Next netuid: {next_netuid}")
+                logging.info(f"Next netuid: {result}")
             
-            return next_netuid
+            return result
             
         except Exception as e:
             if self.log_verbose:

@@ -60,7 +60,7 @@ class Hetutensor(HetutensorMixin):
         if network in NETWORKS:
             self.chain_endpoint = NETWORK_MAP[network]
         else:
-            self.chain_endpoint = "http://161.97.161.133:8545"  # Default mock endpoint
+            self.chain_endpoint = "http://161.97.161.133:18545"  # Default mock endpoint
         self.web3 = Web3(HTTPProvider(self.chain_endpoint))
         if self.log_verbose:
             logging.info(
@@ -363,6 +363,158 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.error(f"Failed to get subnet validators for netuid {netuid}: {e}")
             return []
+
+    def get_subnet_miner_count(self, netuid: int, block: Optional[int] = None) -> Optional[int]:
+        """
+        Returns the number of miners (non-validator neurons) in a subnet.
+        
+        Args:
+            netuid (int): The subnet ID.
+            block (Optional[int]): The blockchain block number for the query.
+            
+        Returns:
+            Optional[int]: Number of miners.
+        """
+        try:
+            if not self.neuron_manager:
+                if self.log_verbose:
+                    logging.error("Neuron manager contract not initialized")
+                return None
+            
+            # 获取总神经元数量
+            total_neurons = self.get_subnet_neuron_count(netuid, block)
+            if total_neurons is None:
+                return None
+            
+            # 获取验证者数量
+            validator_count = self.get_subnet_validator_count(netuid, block)
+            if validator_count is None:
+                return None
+            
+            # Miner数量 = 总神经元数量 - 验证者数量
+            miner_count = total_neurons - validator_count
+            
+            if self.log_verbose:
+                logging.info(f"Subnet {netuid} miner count: {miner_count} (total: {total_neurons}, validators: {validator_count})")
+            
+            return miner_count
+            
+        except Exception as e:
+            if self.log_verbose:
+                logging.error(f"Failed to get subnet miner count for netuid {netuid}: {e}")
+            return None
+
+    def get_subnet_miners(self, netuid: int, block: Optional[int] = None) -> list[str]:
+        """
+        Returns all miner addresses (non-validator neurons) in a subnet.
+        
+        Args:
+            netuid (int): The subnet ID.
+            block (Optional[int]): The blockchain block number for the query.
+            
+        Returns:
+            list[str]: List of miner addresses.
+        """
+        try:
+            if not self.neuron_manager:
+                if self.log_verbose:
+                    logging.error("Neuron manager contract not initialized")
+                return []
+            
+            # 获取所有神经元地址
+            all_neurons = self.get_subnet_neurons(netuid, block)
+            if not all_neurons:
+                return []
+            
+            # 获取验证者地址
+            validators = self.get_subnet_validators(netuid, block)
+            if validators is None:
+                return []
+            
+            # 过滤出非验证者神经元（即Miner）
+            miners = [neuron for neuron in all_neurons if neuron not in validators]
+            
+            if self.log_verbose:
+                logging.info(f"Subnet {netuid} miners: {miners}")
+                logging.info(f"Total neurons: {len(all_neurons)}, Validators: {len(validators)}, Miners: {len(miners)}")
+            
+            return miners
+            
+        except Exception as e:
+            if self.log_verbose:
+                logging.error(f"Failed to get subnet miners for netuid {netuid}: {e}")
+            return []
+
+    def is_miner(self, netuid: int, account: str, block: Optional[int] = None) -> bool:
+        """
+        Checks if an account is a miner (non-validator neuron) in a subnet.
+        
+        Args:
+            netuid (int): The subnet ID.
+            account (str): The account address.
+            block (Optional[int]): The blockchain block number for the query.
+            
+        Returns:
+            bool: True if the account is a miner, False otherwise.
+        """
+        try:
+            if not self.neuron_manager:
+                if self.log_verbose:
+                    logging.error("Neuron manager contract not initialized")
+                return False
+            
+            # 检查是否为神经元
+            if not self.is_neuron(netuid, account, block):
+                return False
+            
+            # 检查是否为验证者
+            is_validator = self.is_validator(netuid, account, block)
+            
+            # Miner = 神经元 且 非验证者
+            is_miner = not is_validator
+            
+            if self.log_verbose:
+                logging.info(f"Is miner {account} on netuid {netuid}: {is_miner}")
+            
+            return is_miner
+            
+        except Exception as e:
+            if self.log_verbose:
+                logging.error(f"Failed to check if {account} is miner on netuid {netuid}: {e}")
+            return False
+
+    def get_neuron_type(self, netuid: int, account: str, block: Optional[int] = None) -> Optional[str]:
+        """
+        Returns the type of a neuron (validator or miner).
+        
+        Args:
+            netuid (int): The subnet ID.
+            account (str): The account address.
+            block (Optional[int]): The blockchain block number for the query.
+            
+        Returns:
+            Optional[str]: 'validator', 'miner', or None if not a neuron.
+        """
+        try:
+            if not self.neuron_manager:
+                if self.log_verbose:
+                    logging.error("Neuron manager contract not initialized")
+                return None
+            
+            # 检查是否为神经元
+            if not self.is_neuron(netuid, account, block):
+                return None
+            
+            # 检查是否为验证者
+            if self.is_validator(netuid, account, block):
+                return "validator"
+            else:
+                return "miner"
+            
+        except Exception as e:
+            if self.log_verbose:
+                logging.error(f"Failed to get neuron type for {account} on netuid {netuid}: {e}")
+            return None
 
     def is_neuron(self, netuid: int, account: str, block: Optional[int] = None) -> bool:
         """
@@ -706,11 +858,11 @@ class Hetutensor(HetutensorMixin):
         
         # 合约地址配置
         self.contract_addresses = {
-            "WHETU_TOKEN": "0x10Fc0865C678B3727c842812bE004af3661FA5Ee",
-            "AMM_FACTORY": "0x9aA413fD38582d9aAD6328dd034504F322ea624B", 
-            "GLOBAL_STAKING": "0x24a9Cc5d0Baa1b9a049DA81b615A53ad8e2d3b9E",
-            "SUBNET_MANAGER": "0x591C3103a983Cb92FE4254f8D1a7CC7710B8A0E5",
-            "NEURON_MANAGER": "0x756a874E457756fff16446ef85384FfE8aEf65b0"
+            "WHETU_TOKEN": "0x523a0BB7026CB3139906Dc37833030326245A70E",
+            "AMM_FACTORY": "0x8024Ac2Ae4dCF2696Bf3A4594687ECEb53AdC643", 
+            "GLOBAL_STAKING": "0xe136faC621C86f5E2855b65D12755A8A64DFE9A7",
+            "SUBNET_MANAGER": "0x2f0021635d03d107c4FA82FA2fAB6d5dCb6e53e7",
+            "NEURON_MANAGER": "0xE57A131598563e65aF94D7407632433D77DB8376"
         }
         
         # 合约ABI文件路径
@@ -1041,7 +1193,7 @@ class Hetutensor(HetutensorMixin):
             total_subnets = self.get_total_subnets(block)
             if total_subnets <= 1:  # If only root subnet exists
                 if self.log_verbose:
-                    logging.info("No non-root subnets found")
+                    logging.info("Only root subnet (netuid=0) exists, no non-root subnets found")
                 return []
             
             # Return list from 1 to total_subnets (inclusive)
@@ -1055,6 +1207,42 @@ class Hetutensor(HetutensorMixin):
         except Exception as e:
             if self.log_verbose:
                 logging.error(f"Failed to get subnets: {e}")
+            return []
+
+    def get_all_subnet_ids(self, block: Optional[int] = None) -> list[int]:
+        """
+        Returns a list of ALL subnet IDs including the root subnet (netuid=0).
+        
+        Args:
+            block (Optional[int]): The blockchain block number for the query.
+            
+        Returns:
+            list[int]: List of all subnet IDs from 0 to total_subnets-1.
+        """
+        try:
+            if not self.subnet_manager:
+                if self.log_verbose:
+                    logging.error("Subnet manager contract not initialized")
+                return []
+            
+            # Get total subnets
+            total_subnets = self.get_total_subnets(block)
+            if total_subnets == 0:
+                if self.log_verbose:
+                    logging.info("No subnets found")
+                return []
+            
+            # Return list from 0 to total_subnets-1 (inclusive)
+            subnet_ids = list(range(total_subnets))
+            
+            if self.log_verbose:
+                logging.info(f"Found {len(subnet_ids)} total subnets: {subnet_ids}")
+            
+            return subnet_ids
+            
+        except Exception as e:
+            if self.log_verbose:
+                logging.error(f"Failed to get all subnet IDs: {e}")
             return []
 
     def get_total_subnets(self, block: Optional[int] = None) -> Optional[int]:

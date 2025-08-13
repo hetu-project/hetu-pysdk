@@ -30,34 +30,46 @@ class FastAPIThreadedServer(uvicorn.Server):
         """Disable default signal handlers as we run in a thread."""
         pass
 
-    @contextlib.contextmanager
-    def run_in_thread(self):
-        """Context manager to run server in a thread."""
-        thread = threading.Thread(target=self._wrapper_run)
-        thread.start()
-        try:
-            while not self.started:
-                time.sleep(1e-3)
-            yield
-        finally:
-            self.should_exit = True
-            thread.join()
-
-    def _wrapper_run(self):
-        """Wrapper to set running state."""
-        self.run()
-        self.is_running = False
-
     def start(self):
-        """Start the server."""
+        """Start the server in a separate thread."""
         self.is_running = True
-        self.run_in_thread().__enter__()
+        self.started = False
+        
+        # 创建并启动线程
+        thread = threading.Thread(target=self._run_server)
+        thread.daemon = True  # 设置为守护线程
+        thread.start()
+        
+        # 等待服务器启动
+        max_wait = 10
+        wait_time = 0
+        while not self.started and wait_time < max_wait:
+            time.sleep(0.1)
+            wait_time += 0.1
+        
+        if not self.started:
+            raise RuntimeError("Server failed to start within timeout")
+
+    def _run_server(self):
+        """在后台线程中运行服务器"""
+        try:
+            self.run()
+        except Exception as e:
+            logging.error(f"Server error: {e}")
+        finally:
+            self.is_running = False
+            self.started = False
 
     def stop(self):
         """Stop the server."""
         if self.is_running:
             self.should_exit = True
             self.is_running = False
+            # 等待服务器关闭
+            try:
+                self.should_exit = True
+            except:
+                pass
 
 class Axon:
     """
@@ -120,10 +132,14 @@ class Axon:
 
         # --- Default endpoints ---
         @self.app.post("/ping")
-        def ping(r: Synapse) -> Synapse:
+        def ping():
             """Basic health check endpoint."""
-            r.completion = "pong"
-            return r
+            return {"completion": "pong", "status": "ok"}
+
+        @self.app.get("/ping")
+        def ping_get():
+            """GET ping endpoint for simple health check."""
+            return {"completion": "pong", "status": "ok"}
 
     def info(self) -> dict:
         """Return server info."""
@@ -155,13 +171,30 @@ class Axon:
         self.priority_fn = priority_fn
         self.verify_fn = verify_fn
 
-        async def endpoint(*args, **kwargs):
+        async def endpoint(request: Request):
             """Main endpoint that forwards requests to handler function."""
             try:
-                return await self.forward_fn(*args, **kwargs)
+                if not self.forward_fn:
+                    return {"completion": "No forward function attached", "status_code": 500}
+                
+                # 获取请求体
+                body = await request.json()
+                
+                # 创建 Synapse 对象
+                synapse = Synapse.from_dict(body)
+                
+                # 调用 forward 函数
+                result = await self.forward_fn(synapse)
+                
+                # 如果返回的是 Synapse 对象，转换为字典
+                if hasattr(result, 'to_dict'):
+                    return result.to_dict()
+                else:
+                    return result
+                    
             except Exception as e:
                 logging.error(f"Forward function error: {e}")
-                return Synapse(completion="Error processing request")
+                return {"completion": f"Error processing request: {e}", "status_code": 500}
 
         self.app.add_api_route("/", endpoint, methods=["POST"])
         return self
@@ -205,7 +238,21 @@ class Axon:
             )
             self.fast_server = FastAPIThreadedServer(config=self.fast_config)
             self.fast_server.start()
-            self.started = True
+            
+            # 等待服务器完全启动
+            max_wait = 10  # 最多等待10秒
+            wait_time = 0
+            while not self.fast_server.started and wait_time < max_wait:
+                time.sleep(0.1)
+                wait_time += 0.1
+            
+            if self.fast_server.started:
+                self.started = True
+                logging.info(f"Axon server started successfully on {self.ip}:{self.port}")
+            else:
+                logging.error("Axon server failed to start within timeout")
+                raise RuntimeError("Server startup timeout")
+                
         return self
 
     def stop(self) -> "Axon":
@@ -320,6 +367,10 @@ class AxonMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
         
         try:
+            # 跳过 ping 端点的 body 验证
+            if request.url.path == "/ping":
+                return await call_next(request)
+            
             # Check body
             if not await self.axon.verify_body_integrity(request):
                 return JSONResponse(
@@ -374,9 +425,9 @@ class AxonMiddleware(BaseHTTPMiddleware):
             # Create synapse
             synapse = Synapse.from_dict(body)
             
-            # Add request info
-            synapse.request_ip = request.client.host
-            synapse.request_headers = dict(request.headers)
+            # 注意：不添加不存在的属性，避免验证错误
+            # synapse.request_ip = request.client.host
+            # synapse.request_headers = dict(request.headers)
             
             return synapse
             
