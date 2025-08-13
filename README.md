@@ -1,10 +1,10 @@
-# Hetutensor PySDK
+# HetuSubnet PySDK
 
-Hetutensor PySDK is a Python client library for interacting with the Hetu EVM blockchain, supporting distributed computing, neuron management, and subnet operations.
+HetuSubnet PySDK is a Python client library for interacting with the Hetu EVM blockchain, supporting distributed computing, neuron management, and subnet operations.
 
 ## 🏗️ Architecture Overview
 
-Hetutensor adopts a layered architecture design with clear separation of responsibilities:
+HetuSubnet adopts a layered architecture design with clear separation of responsibilities:
 
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
@@ -116,7 +116,6 @@ User → Mainnet Staking → Allocate to Subnet → Register Neuron → Provide 
 
 ### 4. Key Differences from Traditional Networks
 
-- **No Root Subnet**: Hetutensor doesn't have a netuid=0 root subnet
 - **Direct Mainnet Control**: Mainnet directly manages all subnets
 - **Independent Subnet Governance**: Each subnet has its own parameters and governance
 - **Flexible Subnet Creation**: New subnets can be created for different use cases
@@ -468,12 +467,12 @@ async def sync_neuron_status(netuid: int, neuron_address: str):
 
 ## 📚 Core Components
 
-### Hetutensor Client
+### HetuSubnet Client
 ```python
-from hetu.hetu import Hetutensor
+from hetu.hetu import HetuSubnet
 
 # Initialize client
-hetu = Hetutensor(
+hetu = HetuSubnet(
     network="local",  # or "mainnet", "testnet"
     log_verbose=True
 )
@@ -843,7 +842,7 @@ async def distribute_rewards(netuid: int, consensus_result: dict, miner_response
 ```python
 # test_local_computation.py
 import asyncio
-from hetu.hetu import Hetutensor
+from hetu.hetu import HetuSubnet
 from hetu.axon import Axon
 from hetu.dendrite import Dendrite
 from hetu.synapse import Synapse
@@ -894,11 +893,11 @@ if __name__ == "__main__":
 ```python
 # test_network_computation.py
 import asyncio
-from hetu.hetu import Hetutensor
+from hetu.hetu import HetuSubnet
 
 async def test_network_computation():
-    # 1. Initialize Hetutensor client
-    hetu = Hetutensor(
+    # 1. Initialize HetuSubnet client
+    hetu = HetuSubnet(
         network="mainnet",  # or "testnet"
         log_verbose=True
     )
@@ -1011,7 +1010,7 @@ async def robust_query(dendrite, axons, synapse, max_retries=3):
 
 ## 📝 Summary
 
-Hetutensor PySDK provides complete distributed computing infrastructure:
+HetuSubnet PySDK provides complete distributed computing infrastructure:
 
 1. **Subnet Management**: Create, configure, and activate dedicated networks
 2. **Neuron Management**: Register, stake, and synchronize state
@@ -1025,4 +1024,4 @@ This architecture supports building decentralized computing networks where:
 - Neurons execute actual compute tasks
 - Validators ensure network quality and security
 
-Through this design, Hetutensor achieves true decentralized distributed computing while maintaining the balance of economic incentives and network governance.
+Through this design, HetuSubnet achieves true decentralized distributed computing while maintaining the balance of economic incentives and network governance.
