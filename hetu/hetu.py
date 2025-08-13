@@ -67,20 +67,20 @@ class Hetutensor(HetutensorMixin):
                 f"Connected to {self.network} network at {self.chain_endpoint} (EVM mock mode)."
             )
         
-        # 初始化合约
+        # Initialize contracts
         self._init_contract()
         
-        # 初始化钱包
+        # Initialize wallet
         self._init_wallet(username, password, wallet_path)
 
     def _init_wallet(self, username: Optional[str] = None, password: Optional[str] = None, wallet_path: Optional[str] = None):
         """
-        初始化钱包
+        Initialize wallet
         
         Args:
-            username (Optional[str]): 钱包用户名
-            password (Optional[str]): 钱包密码
-            wallet_path (Optional[str]): 钱包路径
+            username (Optional[str]): Wallet username
+            password (Optional[str]): Wallet password
+            wallet_path (Optional[str]): Wallet path
         """
         from hetu.utils.wallet import unlock_wallet
         
@@ -89,7 +89,7 @@ class Hetutensor(HetutensorMixin):
         self.wallet_path = wallet_path
         
         if username and password:
-            # 使用提供的用户名和密码解锁钱包
+            # Unlock wallet with provided username and password
             try:
                 self.wallet = unlock_wallet(username, password, wallet_path)
                 self.wallet_name = username
@@ -102,15 +102,15 @@ class Hetutensor(HetutensorMixin):
 
     def set_wallet_from_username(self, username: str, password: str, wallet_path: Optional[str] = None) -> bool:
         """
-        通过用户名和密码设置钱包
+        Set wallet from username and password
         
         Args:
-            username (str): 钱包用户名
-            password (str): 钱包密码
-            wallet_path (Optional[str]): 钱包路径
+            username (str): Wallet username
+            password (str): Wallet password
+            wallet_path (Optional[str]): Wallet path
             
         Returns:
-            bool: 是否成功设置钱包
+            bool: Whether wallet was successfully set
         """
         from hetu.utils.wallet import unlock_wallet
         
@@ -127,14 +127,14 @@ class Hetutensor(HetutensorMixin):
 
     def set_wallet_from_private_key(self, private_key: str, wallet_name: Optional[str] = None) -> bool:
         """
-        通过私钥设置钱包
+        Set wallet from private key
         
         Args:
-            private_key (str): 私钥（十六进制格式）
-            wallet_name (Optional[str]): 钱包名称（可选）
+            private_key (str): Private key (hex format)
+            wallet_name (Optional[str]): Wallet name (optional)
             
         Returns:
-            bool: 是否成功设置钱包
+            bool: Whether wallet was successfully set
         """
         from eth_account import Account
         
@@ -151,7 +151,7 @@ class Hetutensor(HetutensorMixin):
 
     def clear_wallet(self):
         """
-        清除当前钱包设置
+        Clear current wallet settings
         """
         self.wallet = None
         self.wallet_name = None
@@ -160,19 +160,19 @@ class Hetutensor(HetutensorMixin):
 
     def has_wallet(self) -> bool:
         """
-        检查是否有设置的钱包
+        Check if wallet is set
         
         Returns:
-            bool: 是否有钱包
+            bool: Whether wallet exists
         """
         return self.wallet is not None
 
     def get_wallet_address(self) -> Optional[str]:
         """
-        获取钱包地址
+        Get wallet address
         
         Returns:
-            Optional[str]: 钱包地址，如果没有设置则返回None
+            Optional[str]: Wallet address, or None if not set
         """
         return self.wallet.address if self.wallet else None
 
@@ -196,13 +196,13 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return None
             
-            # 调用合约的getNeuronInfo函数
+            # Call contract's getNeuronInfo function
             result = self.neuron_manager.functions.getNeuronInfo(netuid, account).call()
             
             if self.log_verbose:
                 logging.info(f"Raw neuron info for {account} on netuid {netuid}: {result}")
             
-            # 解析返回的结果 - 根据ABI中的NeuronInfo结构体
+            # Parse returned result - according to NeuronInfo struct in ABI
             # result[0] = account
             # result[1] = netuid  
             # result[2] = isActive
@@ -261,7 +261,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return None
             
-            # 调用合约的getSubnetNeuronCount函数
+            # Call contract's getSubnetNeuronCount function
             count = self.neuron_manager.functions.getSubnetNeuronCount(netuid).call()
             
             if self.log_verbose:
@@ -291,7 +291,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return []
             
-            # 调用合约的getNeuronList函数
+            # Call contract's getNeuronList function
             neurons = self.neuron_manager.functions.getNeuronList(netuid).call()
             
             if self.log_verbose:
@@ -321,7 +321,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return None
             
-            # 调用合约的getSubnetValidatorCount函数
+            # Call contract's getSubnetValidatorCount function
             count = self.neuron_manager.functions.getSubnetValidatorCount(netuid).call()
             
             if self.log_verbose:
@@ -351,7 +351,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return []
             
-            # 调用合约的getSubnetValidators函数
+            # Call contract's getSubnetValidators function
             validators = self.neuron_manager.functions.getSubnetValidators(netuid).call()
             
             if self.log_verbose:
@@ -381,17 +381,17 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return None
             
-            # 获取总神经元数量
+            # Get total neuron count
             total_neurons = self.get_subnet_neuron_count(netuid, block)
             if total_neurons is None:
                 return None
             
-            # 获取验证者数量
+            # Get validator count
             validator_count = self.get_subnet_validator_count(netuid, block)
             if validator_count is None:
                 return None
             
-            # Miner数量 = 总神经元数量 - 验证者数量
+            # Miner count = total neuron count - validator count
             miner_count = total_neurons - validator_count
             
             if self.log_verbose:
@@ -421,17 +421,17 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return []
             
-            # 获取所有神经元地址
+            # Get all neuron addresses
             all_neurons = self.get_subnet_neurons(netuid, block)
             if not all_neurons:
                 return []
             
-            # 获取验证者地址
+            # Get validator addresses
             validators = self.get_subnet_validators(netuid, block)
             if validators is None:
                 return []
             
-            # 过滤出非验证者神经元（即Miner）
+            # Filter out non-validator neurons (i.e., Miners)
             miners = [neuron for neuron in all_neurons if neuron not in validators]
             
             if self.log_verbose:
@@ -463,14 +463,14 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return False
             
-            # 检查是否为神经元
+            # Check if it's a neuron
             if not self.is_neuron(netuid, account, block):
                 return False
             
-            # 检查是否为验证者
+            # Check if it's a validator
             is_validator = self.is_validator(netuid, account, block)
             
-            # Miner = 神经元 且 非验证者
+            # Miner = neuron AND not validator
             is_miner = not is_validator
             
             if self.log_verbose:
@@ -501,11 +501,11 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return None
             
-            # 检查是否为神经元
+            # Check if it's a neuron
             if not self.is_neuron(netuid, account, block):
                 return None
             
-            # 检查是否为验证者
+            # Check if it's a validator
             if self.is_validator(netuid, account, block):
                 return "validator"
             else:
@@ -534,7 +534,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return False
             
-            # 调用合约的isNeuron函数
+            # Call contract's isNeuron function
             is_neuron = self.neuron_manager.functions.isNeuron(netuid, account).call()
             
             if self.log_verbose:
@@ -565,7 +565,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return False
             
-            # 调用合约的isValidator函数
+            # Call contract's isValidator function
             is_validator = self.neuron_manager.functions.isValidator(netuid, account).call()
             
             if self.log_verbose:
@@ -597,7 +597,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Neuron manager contract not initialized")
                 return False
             
-            # ABI中没有canRegisterNeuron函数，暂时返回False
+            # The canRegisterNeuron function is not available in the current ABI, so we'll return False
             if self.log_verbose:
                 logging.warning(f"canRegisterNeuron function not available in ABI, returning False for {user} on netuid {netuid}")
             
@@ -642,10 +642,10 @@ class Hetutensor(HetutensorMixin):
                 logging.info(f"  Axon endpoint: {axon_endpoint}:{axon_port}")
                 logging.info(f"  Prometheus endpoint: {prometheus_endpoint}:{prometheus_port}")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(self.wallet.address)
             
-            # 构建交易
+            # Build transaction
             gas_limit = kwargs.get('gas_limit', 500000)
             tx = self.neuron_manager.functions.registerNeuronWithStakeAllocation(
                 netuid, 0, is_validator_role, axon_endpoint, axon_port, prometheus_endpoint, prometheus_port
@@ -656,16 +656,16 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, self.wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Register neuron transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -684,9 +684,9 @@ class Hetutensor(HetutensorMixin):
                 if self.log_verbose:
                     logging.error(f"Neuron registration failed in block {receipt.blockNumber}")
                     logging.error(f"Receipt: {receipt}")
-                    # 尝试解析错误信息
+                    # Try to parse error information
                     try:
-                        # 检查是否有错误日志
+                        # Check for error logs
                         if hasattr(receipt, 'logs') and receipt.logs:
                             for log in receipt.logs:
                                 logging.error(f"Error log: {log}")
@@ -726,10 +726,10 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.info(f"Deregistering neuron from netuid {netuid}")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(self.wallet.address)
             
-            # 构建交易
+            # Build transaction
             gas_limit = kwargs.get('gas_limit', 200000)
             tx = self.neuron_manager.functions.deregisterNeuron(netuid).build_transaction({
                 "from": self.wallet.address,
@@ -738,16 +738,16 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, self.wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Deregister neuron transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -802,10 +802,10 @@ class Hetutensor(HetutensorMixin):
                 logging.info(f"  Axon endpoint: {axon_endpoint}:{axon_port}")
                 logging.info(f"  Prometheus endpoint: {prometheus_endpoint}:{prometheus_port}")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(self.wallet.address)
             
-            # 构建交易
+            # Build transaction
             gas_limit = kwargs.get('gas_limit', 200000)
             tx = self.neuron_manager.functions.updateNeuronService(
                 netuid, axon_endpoint, axon_port, prometheus_endpoint, prometheus_port
@@ -816,16 +816,16 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, self.wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Update service transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -850,13 +850,13 @@ class Hetutensor(HetutensorMixin):
 
     def _init_contract(self):
         """
-        初始化Hetu智能合约
-        加载所有合约的ABI和地址
+        Initialize Hetu smart contracts
+        Load all contracts' ABI and addresses
         """
         import json
         import os
         
-        # 合约地址配置
+        # Contract address configuration
         self.contract_addresses = {
             "WHETU_TOKEN": "0x523a0BB7026CB3139906Dc37833030326245A70E",
             "AMM_FACTORY": "0x8024Ac2Ae4dCF2696Bf3A4594687ECEb53AdC643", 
@@ -865,7 +865,7 @@ class Hetutensor(HetutensorMixin):
             "NEURON_MANAGER": "0xE57A131598563e65aF94D7407632433D77DB8376"
         }
         
-        # 合约ABI文件路径
+        # Contract ABI file path
         contracts_dir = os.path.join(os.path.dirname(__file__), "..", "contracts")
         abi_files = {
             "WHETU_TOKEN": "WHETU.abi",
@@ -875,7 +875,7 @@ class Hetutensor(HetutensorMixin):
             "NEURON_MANAGER": "NeuronManager.abi"
         }
         
-        # 初始化合约实例
+        # Initialize contract instances
         self.contracts = {}
         
         for contract_name, abi_file in abi_files.items():
@@ -894,17 +894,17 @@ class Hetutensor(HetutensorMixin):
                     self.contracts[contract_name] = contract
                     
                     if self.log_verbose:
-                        logging.info(f"✅ 初始化合约: {contract_name} at {contract_address}")
+                        logging.info(f"✅ Contract initialized: {contract_name} at {contract_address}")
                         
                 else:
                     if self.log_verbose:
-                        logging.warning(f"⚠️ ABI文件不存在: {abi_path}")
+                        logging.warning(f"⚠️ ABI file does not exist: {abi_path}")
                         
             except Exception as e:
                 if self.log_verbose:
-                    logging.error(f"❌ 初始化合约 {contract_name} 失败: {e}")
+                    logging.error(f"❌ Failed to initialize contract {contract_name}: {e}")
         
-        # 为方便访问，添加直接属性
+        # For easy access, add direct attributes
         self.whetu_token = self.contracts.get("WHETU_TOKEN")
         self.subnet_manager = self.contracts.get("SUBNET_MANAGER")
         self.neuron_manager = self.contracts.get("NEURON_MANAGER")
@@ -1015,7 +1015,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return []
             
-            # 获取下一个netuid作为上限
+            # Get next netuid as upper limit
             next_netuid = self.get_next_netuid(block)
             if self.log_verbose:
                 logging.info(f"Next netuid: {next_netuid}")
@@ -1027,13 +1027,13 @@ class Hetutensor(HetutensorMixin):
             
             subnet_info_list = []
             
-            # 遍历从0到next_netuid-1的所有可能netuid
+            # Iterate from 0 to next_netuid-1
             for netuid in range(next_netuid):
                 try:
                     if self.log_verbose:
                         logging.info(f"Checking netuid {netuid}...")
                     
-                    # 检查子网是否存在
+                    # Check if subnet exists
                     if self.is_subnet_exists(netuid, block):
                         subnet_info = self.get_subnet_info(netuid, block)
                         if subnet_info:
@@ -1133,23 +1133,23 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return None
             
-            # 调用合约的getSubnetDetails函数
+            # Call contract's getSubnetDetails function
             result = self.subnet_manager.functions.getSubnetDetails(netuid).call()
             
             if self.log_verbose:
                 logging.info(f"Raw subnet details for netuid {netuid}: {result}")
             
-            # 解析返回的结果
-            # result[0] 是 subnetInfo 结构体
-            # result[1] 是 currentPrice
-            # result[2] 是 totalVolume  
-            # result[3] 是 hetuReserve
-            # result[4] 是 alphaReserve
+            # Parse returned result
+            # result[0] is subnetInfo structure
+            # result[1] is currentPrice
+            # result[2] is totalVolume  
+            # result[3] is hetuReserve
+            # result[4] is alphaReserve
             
             subnet_info_tuple = result[0]
             market_data = (result[1], result[2], result[3], result[4])
             
-            # 使用EVMSubnetInfo.from_contract_data创建对象
+            # Use EVMSubnetInfo.from_contract_data to create object
             evm_subnet_info = EVMSubnetInfo.from_contract_data(subnet_info_tuple, market_data)
             
             if self.log_verbose:
@@ -1249,7 +1249,7 @@ class Hetutensor(HetutensorMixin):
         """Returns the total number of subnets using the subnet manager contract."""
         try:
             if self.subnet_manager:
-                # 使用合约调用获取总子网数
+                # Use contract to get total subnets
                 total_networks = self.subnet_manager.functions.totalNetworks().call()
                 if self.log_verbose:
                     logging.info(f"Total subnets from contract: {total_networks}")
@@ -1303,7 +1303,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return False
             
-            # 获取子网信息
+            # Get subnet info
             subnet_info = self.get_subnet_info(netuid, block)
             if subnet_info:
                 is_active = subnet_info.is_active
@@ -1401,7 +1401,7 @@ class Hetutensor(HetutensorMixin):
         description: str = None,
         token_name: str = None,
         token_symbol: str = None,
-        gas_limit: int = 10000000,  # 增加到1000万gas
+        gas_limit: int = 10000000,  # Increase to 10 million gas
         **kwargs
     ) -> bool:
         """
@@ -1425,7 +1425,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return False
             
-            # 设置默认值
+            # Set default values
             name = name or kwargs.get('name', 'Default Subnet')
             description = description or kwargs.get('description', 'A default subnet')
             token_name = token_name or kwargs.get('token_name', 'Default Token')
@@ -1436,10 +1436,10 @@ class Hetutensor(HetutensorMixin):
                 logging.info(f"Description: {description}")
                 logging.info(f"Token: {token_name} ({token_symbol})")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(wallet.address)
             
-            # 构建交易
+            # Build transaction
             tx = self.subnet_manager.functions.registerNetwork(
                 name, description, token_name, token_symbol
             ).build_transaction({
@@ -1449,7 +1449,7 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 估算gas使用量
+            # Estimate gas usage
             try:
                 estimated_gas = self.subnet_manager.functions.registerNetwork(
                     name, description, token_name, token_symbol
@@ -1468,16 +1468,16 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.info(f"Transaction built: {tx}")
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -1496,9 +1496,9 @@ class Hetutensor(HetutensorMixin):
                 if self.log_verbose:
                     logging.error(f"Subnet registration failed in block {receipt.blockNumber}")
                     logging.error(f"Receipt: {receipt}")
-                    # 尝试解析错误信息
+                    # Try to parse error information
                     try:
-                        # 检查是否有错误日志
+                        # Check for error logs
                         if hasattr(receipt, 'logs') and receipt.logs:
                             for log in receipt.logs:
                                 logging.error(f"Error log: {log}")
@@ -1654,13 +1654,13 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return None
             
-            # 调用合约的getNetworkParams函数
+            # Call contract's getNetworkParams function
             result = self.subnet_manager.functions.getNetworkParams().call()
             
             if self.log_verbose:
                 logging.info(f"Network params: {result}")
             
-            # 解析返回的结果
+            # Parse returned result
             # result[0] = minLock
             # result[1] = lastLock  
             # result[2] = lastLockBlock
@@ -1713,7 +1713,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return None
             
-            # 调用合约的getNetworkLockCost函数
+            # Call contract's getNetworkLockCost function
             lock_cost = self.subnet_manager.functions.getNetworkLockCost().call()
             
             if self.log_verbose:
@@ -1742,7 +1742,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return None
             
-            # 调用合约的getNextNetuid函数
+            # Call contract's getNextNetuid function
             next_netuid = self.subnet_manager.functions.getNextNetuid().call()
             
             if self.log_verbose:
@@ -1772,14 +1772,14 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return None
             
-            # 调用合约的getSubnetHyperparams函数
+            # Call contract's getSubnetHyperparams function
             result = self.subnet_manager.functions.getSubnetHyperparams(netuid).call()
             
             if self.log_verbose:
                 logging.info(f"Raw hyperparams for netuid {netuid}: {result}")
             
-            # 解析返回的结构体
-            # result是一个包含21个字段的元组
+            # Parse returned structure
+            # result is a tuple containing 21 elements
             hyperparams = {
                 "rho": result[0],
                 "kappa": result[1],
@@ -1837,14 +1837,14 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return None
             
-            # 调用合约的getSubnetParams函数
+            # Call contract's getSubnetParams function
             result = self.subnet_manager.functions.getSubnetParams(netuid).call()
             
             if self.log_verbose:
                 logging.info(f"Raw subnet params for netuid {netuid}: {result}")
             
-            # 解析返回的结果
-            # result是一个包含多个字段的元组，对应SubnetTypes.SubnetHyperparams结构体
+            # Parse returned result
+            # result is a tuple containing multiple fields corresponding to SubnetTypes.SubnetHyperparams structure
             subnet_params = {
                 "rho": result[0],
                 "kappa": result[1], 
@@ -1906,7 +1906,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return []
             
-            # 调用合约的getUserSubnets函数
+            # Call contract's getUserSubnets function
             subnet_ids = self.subnet_manager.functions.getUserSubnets(user_address).call()
             
             if self.log_verbose:
@@ -1936,7 +1936,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Subnet manager contract not initialized")
                 return False
             
-            # 调用合约的subnetExists函数
+            # Call contract's subnetExists function
             exists = self.subnet_manager.functions.subnetExists(netuid).call()
             
             if self.log_verbose:
@@ -1970,10 +1970,10 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.info(f"Activating subnet {netuid}")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(wallet.address)
             
-            # 构建交易
+            # Build transaction
             gas_limit = kwargs.get('gas_limit', 200000)
             tx = self.subnet_manager.functions.activateSubnet(netuid).build_transaction({
                 "from": wallet.address,
@@ -1982,7 +1982,7 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 估算gas使用量
+            # Estimate gas usage
             try:
                 estimated_gas = self.subnet_manager.functions.activateSubnet(netuid).estimate_gas({
                     "from": wallet.address,
@@ -1995,16 +1995,16 @@ class Hetutensor(HetutensorMixin):
                 if self.log_verbose:
                     logging.warning(f"Failed to estimate gas: {gas_error}")
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Activation transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -2047,10 +2047,10 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.info("Resetting network lock state")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(wallet.address)
             
-            # 构建交易
+            # Build transaction
             gas_limit = kwargs.get('gas_limit', 100000)
             tx = self.subnet_manager.functions.resetNetworkLockState().build_transaction({
                 "from": wallet.address,
@@ -2059,16 +2059,16 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Reset transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -2114,10 +2114,10 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.info(f"Updating network params: min_lock={min_lock}, rate_limit={rate_limit}, reduction_interval={reduction_interval}")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(wallet.address)
             
-            # 构建交易
+            # Build transaction
             gas_limit = kwargs.get('gas_limit', 200000)
             tx = self.subnet_manager.functions.updateNetworkParams(min_lock, rate_limit, reduction_interval).build_transaction({
                 "from": wallet.address,
@@ -2126,16 +2126,16 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Update transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -2177,13 +2177,13 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Global staking contract not initialized")
                 return None
             
-            # 调用合约的getStakeInfo函数
+            # Call contract's getStakeInfo function
             result = self.global_staking.functions.getStakeInfo(user_address).call()
             
             if self.log_verbose:
                 logging.info(f"Stake info for {user_address}: {result}")
             
-            # 解析返回的结果
+            # Parse returned result
             # result[0] = totalStaked
             # result[1] = totalAllocated
             # result[2] = availableForAllocation
@@ -2232,13 +2232,13 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Global staking contract not initialized")
                 return None
             
-            # 调用合约的getSubnetAllocation函数
+            # Call contract's getSubnetAllocation function
             result = self.global_staking.functions.getSubnetAllocation(user_address, netuid).call()
             
             if self.log_verbose:
                 logging.info(f"Subnet allocation for {user_address} on netuid {netuid}: {result}")
             
-            # 解析返回的结果 - 根据ABI文件，返回的是SubnetAllocation结构体
+            # Parse returned result - according to ABI file, returns SubnetAllocation structure
             # result[0] = allocated
             # result[1] = cost  
             # result[2] = lastUpdateBlock
@@ -2280,7 +2280,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Global staking contract not initialized")
                 return None
             
-            # 调用合约的getAvailableStake函数 - 只接受user_address参数
+            # Call contract's getAvailableStake function - only accepts user_address parameter
             available_stake = self.global_staking.functions.getAvailableStake(user_address).call()
             
             if self.log_verbose:
@@ -2312,7 +2312,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Global staking contract not initialized")
                 return None
             
-            # 使用getSubnetAllocation函数替代
+            # Use getSubnetAllocation function instead
             allocation = self.get_subnet_allocation(user_address, netuid, block)
             if allocation:
                 effective_stake = allocation.get('allocated', 0)
@@ -2348,7 +2348,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Global staking contract not initialized")
                 return None
             
-            # 当前ABI中没有getLockedStake函数，暂时返回0
+            # The getLockedStake function is not available in the current ABI, so we'll return 0 for now
             if self.log_verbose:
                 logging.warning(f"getLockedStake function not available in current ABI for {user_address} on netuid {netuid}")
             
@@ -2375,7 +2375,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Global staking contract not initialized")
                 return None
             
-            # 调用合约的getTotalStaked函数
+            # Call contract's getTotalStaked function
             total_staked = self.global_staking.functions.getTotalStaked().call()
             
             if self.log_verbose:
@@ -2405,13 +2405,13 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Global staking contract not initialized")
                 return None
             
-            # 调用合约的getUserStakeInfo函数
+            # Call contract's getUserStakeInfo function
             result = self.global_staking.functions.getUserStakeInfo(user_address).call()
             
             if self.log_verbose:
                 logging.info(f"User stake info for {user_address}: {result}")
             
-            # 解析返回的结果
+            # Parse returned result
             # result[0] = totalStaked_
             # result[1] = availableForAllocation
             # result[2] = allocatedSubnets
@@ -2454,7 +2454,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Global staking contract not initialized")
                 return False
             
-            # 调用合约的canBecomeNeuron函数
+            # Call contract's canBecomeNeuron function
             can_become = self.global_staking.functions.canBecomeNeuron(user_address, netuid, required_amount).call()
             
             if self.log_verbose:
@@ -2484,7 +2484,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("Global staking contract not initialized")
                 return False
             
-            # 调用合约的hasParticipationEligibility函数
+            # Call contract's hasParticipationEligibility function
             has_eligibility = self.global_staking.functions.hasParticipationEligibility(user_address).call()
             
             if self.log_verbose:
@@ -2516,7 +2516,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("WHETU token contract not initialized")
                 return None
             
-            # 调用合约的balanceOf函数
+            # Call contract's balanceOf function
             balance = self.whetu_token.functions.balanceOf(address).call()
             
             if self.log_verbose:
@@ -2547,7 +2547,7 @@ class Hetutensor(HetutensorMixin):
                     logging.error("WHETU token contract not initialized")
                 return None
             
-            # 调用合约的allowance函数
+            # Call contract's allowance function
             allowance = self.whetu_token.functions.allowance(owner, spender).call()
             
             if self.log_verbose:
@@ -2582,10 +2582,10 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.info(f"Approving {amount} WHETU for {spender}")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(wallet.address)
             
-            # 构建交易
+            # Build transaction
             gas_limit = kwargs.get('gas_limit', 100000)
             tx = self.whetu_token.functions.approve(spender, amount).build_transaction({
                 "from": wallet.address,
@@ -2594,16 +2594,16 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Approval transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -2649,10 +2649,10 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.info(f"Adding global stake: {amount}")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(wallet.address)
             
-            # 构建交易
+            # Build transaction
             gas_limit = kwargs.get('gas_limit', 200000)
             tx = self.global_staking.functions.addGlobalStake(amount).build_transaction({
                 "from": wallet.address,
@@ -2661,16 +2661,16 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Add global stake transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -2714,10 +2714,10 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.info(f"Removing global stake: {amount}")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(wallet.address)
             
-            # 构建交易
+            # Build transaction
             gas_limit = kwargs.get('gas_limit', 200000)
             tx = self.global_staking.functions.removeGlobalStake(amount).build_transaction({
                 "from": wallet.address,
@@ -2726,16 +2726,16 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Remove global stake transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -2780,10 +2780,10 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.info(f"Allocating {amount} to subnet {netuid}")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(wallet.address)
             
-            # 构建交易
+            # Build transaction
             gas_limit = kwargs.get('gas_limit', 200000)
             tx = self.global_staking.functions.allocateToSubnet(netuid, amount).build_transaction({
                 "from": wallet.address,
@@ -2792,16 +2792,16 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Allocate to subnet transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -2847,7 +2847,7 @@ class Hetutensor(HetutensorMixin):
                 logging.warning(f"Lock subnet stake function not supported by the contract")
                 logging.warning(f"Netuid: {netuid}, Amount: {amount}")
             
-            # 这个功能在当前合约中不存在
+            # This functionality is not present in the current contract
             return False
                 
         except Exception as e:
@@ -2880,7 +2880,7 @@ class Hetutensor(HetutensorMixin):
                 logging.warning(f"Unlock subnet stake function not supported by the contract")
                 logging.warning(f"Netuid: {netuid}, Amount: {amount}")
             
-            # 这个功能在当前合约中不存在
+            # This functionality is not present in the current contract
             return False
                 
         except Exception as e:
@@ -2910,10 +2910,10 @@ class Hetutensor(HetutensorMixin):
             if self.log_verbose:
                 logging.info("Claiming rewards")
             
-            # 获取nonce
+            # Get nonce
             nonce = self.web3.eth.get_transaction_count(wallet.address)
             
-            # 构建交易
+            # Build transaction
             gas_limit = kwargs.get('gas_limit', 150000)
             tx = self.global_staking.functions.claimRewards().build_transaction({
                 "from": wallet.address,
@@ -2922,16 +2922,16 @@ class Hetutensor(HetutensorMixin):
                 "gasPrice": self.web3.eth.gas_price,
             })
             
-            # 签名交易
+            # Sign transaction
             signed = self.web3.eth.account.sign_transaction(tx, wallet.key)
             
-            # 发送交易
+            # Send transaction
             tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
             
             if self.log_verbose:
                 logging.info(f"Claim rewards transaction sent: {tx_hash.hex()}")
             
-            # 等待交易收据
+            # Wait for receipt
             receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
             
             if self.log_verbose:
@@ -2980,7 +2980,7 @@ class Hetutensor(HetutensorMixin):
                 if self.log_verbose:
                     logging.error(f"Failed to get subnet info for netuid {netuid}")
                 return None
-            return subnet_info.amm_pool  # 修改这里，使用正确的属性名
+            return subnet_info.amm_pool  # Modify here, use correct attribute name
         
         return pool_address
 

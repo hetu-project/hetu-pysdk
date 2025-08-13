@@ -35,12 +35,12 @@ class FastAPIThreadedServer(uvicorn.Server):
         self.is_running = True
         self.started = False
         
-        # 创建并启动线程
+        # Create and start thread
         thread = threading.Thread(target=self._run_server)
-        thread.daemon = True  # 设置为守护线程
+        thread.daemon = True  # Set as daemon thread
         thread.start()
         
-        # 等待服务器启动
+        # Wait for server startup
         max_wait = 10
         wait_time = 0
         while not self.started and wait_time < max_wait:
@@ -51,7 +51,7 @@ class FastAPIThreadedServer(uvicorn.Server):
             raise RuntimeError("Server failed to start within timeout")
 
     def _run_server(self):
-        """在后台线程中运行服务器"""
+        """Run server in background thread"""
         try:
             self.run()
         except Exception as e:
@@ -65,7 +65,7 @@ class FastAPIThreadedServer(uvicorn.Server):
         if self.is_running:
             self.should_exit = True
             self.is_running = False
-            # 等待服务器关闭
+            # Wait for server shutdown
             try:
                 self.should_exit = True
             except:
@@ -177,16 +177,16 @@ class Axon:
                 if not self.forward_fn:
                     return {"completion": "No forward function attached", "status_code": 500}
                 
-                # 获取请求体
+                # Get request body
                 body = await request.json()
                 
-                # 创建 Synapse 对象
+                # Create Synapse object
                 synapse = Synapse.from_dict(body)
                 
-                # 调用 forward 函数
+                # Call forward function
                 result = await self.forward_fn(synapse)
                 
-                # 如果返回的是 Synapse 对象，转换为字典
+                # If the result is a Synapse object, convert to dictionary
                 if hasattr(result, 'to_dict'):
                     return result.to_dict()
                 else:
@@ -239,8 +239,8 @@ class Axon:
             self.fast_server = FastAPIThreadedServer(config=self.fast_config)
             self.fast_server.start()
             
-            # 等待服务器完全启动
-            max_wait = 10  # 最多等待10秒
+            # Wait for server to fully start
+            max_wait = 10  # Max wait 10 seconds
             wait_time = 0
             while not self.fast_server.started and wait_time < max_wait:
                 time.sleep(0.1)
@@ -367,7 +367,7 @@ class AxonMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
         
         try:
-            # 跳过 ping 端点的 body 验证
+            # Skip body validation for ping endpoint
             if request.url.path == "/ping":
                 return await call_next(request)
             
@@ -425,7 +425,7 @@ class AxonMiddleware(BaseHTTPMiddleware):
             # Create synapse
             synapse = Synapse.from_dict(body)
             
-            # 注意：不添加不存在的属性，避免验证错误
+            # Note: Do not add non-existent attributes to avoid validation errors
             # synapse.request_ip = request.client.host
             # synapse.request_headers = dict(request.headers)
             
