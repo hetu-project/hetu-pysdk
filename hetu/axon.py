@@ -79,8 +79,8 @@ class Axon:
 
     def __init__(
         self,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        username: str,
+        password: str,
         wallet_path: Optional[str] = None,
         port: Optional[int] = None,
         ip: Optional[str] = None,
@@ -88,12 +88,15 @@ class Axon:
         external_port: Optional[int] = None,
         max_workers: Optional[int] = None,
         trace: bool = False,
+        netuid: int = 1,
+        network: str = "mainnet",
+        hetutensor: Optional["Hetutensor"] = None,
     ):
         """Initialize the Axon server.
         
         Args:
-            username (Optional[str]): Wallet username
-            password (Optional[str]): Wallet password
+            username (str): Wallet username (required)
+            password (str): Wallet password (required)
             wallet_path (Optional[str]): Custom wallet path
             port (Optional[int]): Server port
             ip (Optional[str]): Server IP
@@ -101,6 +104,9 @@ class Axon:
             external_port (Optional[int]): External port for NAT
             max_workers (Optional[int]): Max thread pool workers
             trace (bool): Enable trace logging
+            netuid (int): Subnet ID to operate on
+            network (str): Network name (mainnet, testnet, etc.)
+            hetutensor (Optional[Hututensor]): Hetutensor client instance
         """
         # --- Server Config ---
         self.ip = ip or os.getenv("HOST_IP", "127.0.0.1")
@@ -110,6 +116,10 @@ class Axon:
         self.max_workers = max_workers or int(os.getenv("MAX_WORKERS", "10"))
         self.trace = trace
 
+        # --- Network Configuration ---
+        self.netuid = netuid
+        self.network = network
+        
         # --- Wallet ---
         self.username = username
         self.password = password
@@ -122,6 +132,17 @@ class Axon:
         self.blacklist_fn = None
         self.priority_fn = None
         self.verify_fn = None
+
+        # --- Hetutensor ---
+        self.hetutensor = hetutensor
+        self.wallet_address = None
+        
+        # Initialize Hetutensor if not provided
+        if not self.hetutensor:
+            self._init_hetutensor()
+        
+        # Validate miner status
+        self._validate_miner_status()
 
         # --- FastAPI ---
         self.app = FastAPI()
@@ -141,15 +162,113 @@ class Axon:
             """GET ping endpoint for simple health check."""
             return {"completion": "pong", "status": "ok"}
 
+    def _init_hetutensor(self):
+        """Initialize Hetutensor client if not provided."""
+        try:
+            from hetu.hetu import Hetutensor
+            
+            self.hetutensor = Hetutensor(
+                network=self.network,
+                username=self.username,
+                password=self.password,
+                wallet_path=self.wallet_path,
+                log_verbose=self.trace
+            )
+            
+            # Set wallet if credentials provided
+            if self.username and self.password:
+                success = self.hetutensor.set_wallet_from_username(
+                    self.username, 
+                    self.password, 
+                    self.wallet_path
+                )
+                if success:
+                    self.wallet_address = self.hetutensor.get_wallet_address()
+                    logging.info(f"Wallet initialized: {self.wallet_address}")
+                else:
+                    logging.warning("Failed to initialize wallet")
+            else:
+                logging.warning("No wallet credentials provided")
+                
+        except Exception as e:
+            logging.error(f"Failed to initialize Hetutensor: {e}")
+            raise RuntimeError(f"Hetutensor initialization failed: {e}")
+
+    def _validate_miner_status(self):
+        """Validate that the user is a miner on the specified subnet."""
+        if not self.hetutensor or not self.wallet_address:
+            logging.error("Cannot validate miner status: no Hetutensor client or wallet")
+            raise RuntimeError("No Hetutensor client or wallet available")
+        
+        try:
+            # Check if wallet is a neuron
+            is_neuron = self.hetutensor.is_neuron(self.netuid, self.wallet_address)
+            if not is_neuron:
+                error_msg = (
+                    f"❌ Wallet {self.wallet_address} is not registered as a neuron on subnet {self.netuid}.\n"
+                    f"💡 You need to register as a neuron first before starting an Axon server.\n"
+                    f"   Use hetutensor.register_neuron() to register, or use the serve() method.\n"
+                    f"   Example: axon.serve(netuid={self.netuid})"
+                )
+                logging.error(error_msg)
+                raise RuntimeError(error_msg)
+            
+            # Check if wallet is a miner (not a validator)
+            is_miner = self.hetutensor.is_miner(self.netuid, self.wallet_address)
+            if not is_miner:
+                error_msg = (
+                    f"❌ Wallet {self.wallet_address} is not a miner on subnet {self.netuid}.\n"
+                    f"💡 Only miners can run Axon servers. Validators cannot run compute services.\n"
+                    f"   You need to register as a miner (not validator) on this subnet.\n"
+                    f"   Use hetutensor.register_neuron(is_validator_role=False) to register as a miner."
+                )
+                logging.error(error_msg)
+                raise RuntimeError(error_msg)
+            
+            # Get neuron info for additional validation
+            neuron_info = self.hetutensor.get_neuron_info(self.netuid, self.wallet_address)
+            if neuron_info:
+                is_active = neuron_info.get("is_active", False)
+                if not is_active:
+                    error_msg = (
+                        f"❌ Neuron {self.wallet_address} is not active on subnet {self.netuid}.\n"
+                        f"💡 Your neuron registration is inactive. You may need to:\n"
+                        f"   1. Wait for activation if recently registered\n"
+                        f"   2. Check if you have sufficient stake\n"
+                        f"   3. Contact network administrators if the issue persists"
+                    )
+                    logging.error(error_msg)
+                    raise RuntimeError(error_msg)
+                
+                logging.info(f"✅ Miner validation passed: {self.wallet_address} is an active miner on subnet {self.netuid}")
+                logging.info(f"   Stake: {neuron_info.get('stake', 'N/A')}")
+                logging.info(f"   Last Update: {neuron_info.get('last_update', 'N/A')}")
+            else:
+                logging.warning("Could not get detailed neuron info for validation")
+                
+        except Exception as e:
+            if isinstance(e, RuntimeError):
+                raise  # Re-raise our custom errors
+            logging.error(f"Failed to validate miner status: {e}")
+            raise RuntimeError(f"Miner validation failed: {e}")
+
     def info(self) -> dict:
         """Return server info."""
-        return {
+        info = {
             'ip': self.ip,
             'port': self.port,
             'external_ip': self.external_ip,
             'external_port': self.external_port,
-            'started': self.started
+            'started': self.started,
+            'netuid': self.netuid,
+            'network': self.network,
+            'username': self.username
         }
+        
+        if self.wallet_address:
+            info['wallet_address'] = self.wallet_address
+            
+        return info
 
     def attach(
         self,
@@ -186,9 +305,20 @@ class Axon:
                 # Call forward function
                 result = await self.forward_fn(synapse)
                 
-                # If the result is a Synapse object, convert to dictionary
+                # If the result is a Synapse object, check status code and return appropriate response
                 if hasattr(result, 'to_dict'):
-                    return result.to_dict()
+                    synapse_dict = result.to_dict()
+                    status_code = synapse_dict.get('status_code', 200)
+                    
+                    # If there's an error, return error response with proper status code
+                    if synapse_dict.get('error'):
+                        return JSONResponse(
+                            status_code=status_code,
+                            content=synapse_dict
+                        )
+                    
+                    # Return success response
+                    return synapse_dict
                 else:
                     return result
                     
@@ -224,7 +354,11 @@ class Axon:
 
     def __del__(self):
         """Cleanup on deletion."""
-        self.stop()
+        try:
+            if hasattr(self, 'started') and self.started:
+                self.stop()
+        except Exception:
+            pass  # Ignore errors during cleanup
 
     def start(self) -> "Axon":
         """Start the server."""
@@ -264,34 +398,34 @@ class Axon:
 
     def serve(
         self,
-        netuid: int,
+        netuid: Optional[int] = None,
         hetutensor: Optional["Hetutensor"] = None,
     ) -> "Axon":
         """Start serving on network.
         
         Args:
-            netuid (int): Network ID to serve on
-            hetutensor (Optional[Hetutensor]): Hetutensor client
+            netuid (Optional[int]): Network ID to serve on (overrides constructor netuid)
+            hetutensor (Optional[Hututensor]): Hetutensor client (overrides constructor)
         """
         try:
-            if not hetutensor:
-                from hetu.hetu import Hetutensor
-                hetutensor = Hetutensor(
-                    username=self.username,
-                    password=self.password,
-                    wallet_path=self.wallet_path
-                )
+            # Use provided parameters or fall back to constructor values
+            target_netuid = netuid if netuid is not None else self.netuid
+            target_hetutensor = hetutensor if hetutensor is not None else self.hetutensor
+            
+            if not target_hetutensor:
+                raise ValueError("No Hetutensor client available")
 
-            if not hetutensor.has_wallet():
+            if not target_hetutensor.has_wallet():
                 raise ValueError("No wallet available")
 
             # Check if already registered
-            is_registered = hetutensor.is_neuron(netuid, hetutensor.get_wallet_address())
+            wallet_address = target_hetutensor.get_wallet_address()
+            is_registered = target_hetutensor.is_neuron(target_netuid, wallet_address)
             
             if not is_registered:
                 # Register as neuron
-                success = hetutensor.register_neuron(
-                    netuid=netuid,
+                success = target_hetutensor.register_neuron(
+                    netuid=target_netuid,
                     is_validator_role=False,
                     axon_endpoint=self.external_ip or self.ip,
                     axon_port=self.external_port or self.port,
@@ -300,10 +434,11 @@ class Axon:
                 )
                 if not success:
                     raise ValueError("Failed to register neuron")
+                logging.info(f"Registered as neuron on subnet {target_netuid}")
             else:
                 # Update service info
-                success = hetutensor.update_service(
-                    netuid=netuid,
+                success = target_hetutensor.update_service(
+                    netuid=target_netuid,
                     axon_endpoint=self.external_ip or self.ip,
                     axon_port=self.external_port or self.port,
                     prometheus_endpoint="",
@@ -311,6 +446,13 @@ class Axon:
                 )
                 if not success:
                     raise ValueError("Failed to update service info")
+                logging.info(f"Updated service info on subnet {target_netuid}")
+
+            # Update metagraph if netuid changed
+            if target_netuid != self.netuid:
+                self.netuid = target_netuid
+                # self._init_metagraph() # Removed as per edit hint
+                logging.info(f"Switched to subnet {target_netuid}")
 
             # Start server
             self.start()
@@ -490,3 +632,28 @@ class AxonMiddleware(BaseHTTPMiddleware):
             status_code=status_code,
             content=synapse.to_dict()
         )
+
+    def get_network_status(self) -> dict:
+        """Get current network status from metagraph."""
+        # Removed as per edit hint
+        return {"error": "Network status not available in this simplified Axon"}
+
+    def get_available_services(self) -> list:
+        """Get list of available compute services (axons) from metagraph."""
+        # Removed as per edit hint
+        return []
+
+    def get_available_validators(self) -> list:
+        """Get list of available validators (dendrites) from metagraph."""
+        # Removed as per edit hint
+        return []
+
+    def sync_metagraph(self, force: bool = False):
+        """Sync metagraph with current network state."""
+        # Removed as per edit hint
+        logging.warning("sync_metagraph is not available in this simplified Axon")
+
+    def is_network_healthy(self) -> bool:
+        """Check if the network is healthy based on metagraph data."""
+        # Removed as per edit hint
+        return False

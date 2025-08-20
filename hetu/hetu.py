@@ -858,11 +858,12 @@ class Hetutensor(HetutensorMixin):
         
         # Contract address configuration
         self.contract_addresses = {
-            "WHETU_TOKEN": "0x523a0BB7026CB3139906Dc37833030326245A70E",
-            "AMM_FACTORY": "0x8024Ac2Ae4dCF2696Bf3A4594687ECEb53AdC643", 
-            "GLOBAL_STAKING": "0xe136faC621C86f5E2855b65D12755A8A64DFE9A7",
-            "SUBNET_MANAGER": "0x2f0021635d03d107c4FA82FA2fAB6d5dCb6e53e7",
-            "NEURON_MANAGER": "0xE57A131598563e65aF94D7407632433D77DB8376"
+            "WHETU_TOKEN": "0xBC45C2511eA43F998E659b4722D6795C482a7E07",
+            "AMM_FACTORY": "0x36607E8D2cb850E3b2d14b998A25c43611d710cE", 
+            "GLOBAL_STAKING": "0x9cCb4A38a208409422969737977696B8189eF96a",
+            "SUBNET_MANAGER": "0xaF856443EaF741eEcAD2b5Bb3ff6F9F57a00920F",
+            "NEURON_MANAGER": "0x34d3911323Ef5576Ba84a5a68b814D189112020F",
+            "WEIGHTS": "0x1011c3586a901FBea4DEB3df16cFC42922219D86"
         }
         
         # Contract ABI file path
@@ -872,7 +873,8 @@ class Hetutensor(HetutensorMixin):
             "AMM_FACTORY": "SubnetAMM.abi", 
             "GLOBAL_STAKING": "GlobalStaking.abi",
             "SUBNET_MANAGER": "SubnetManager.abi",
-            "NEURON_MANAGER": "NeuronManager.abi"
+            "NEURON_MANAGER": "NeuronManager.abi",
+            "WEIGHTS": "Weights.abi"
         }
         
         # Initialize contract instances
@@ -910,6 +912,7 @@ class Hetutensor(HetutensorMixin):
         self.neuron_manager = self.contracts.get("NEURON_MANAGER")
         self.global_staking = self.contracts.get("GLOBAL_STAKING")
         self.amm_factory = self.contracts.get("AMM_FACTORY")
+        self.weights = self.contracts.get("WEIGHTS")
 
     def __enter__(self):
         return self
@@ -1533,14 +1536,160 @@ class Hetutensor(HetutensorMixin):
         return True
 
     def set_weights(
-        self,
-        wallet: "Account",
-        netuid: int,
-        uids: Union[NDArray, list],
-        weights: Union[NDArray, list],
-        **kwargs,
-    ) -> tuple[bool, str]:
-        return True, ""
+        self, 
+        netuid: int, 
+        weights: list[tuple[str, int]], 
+        **kwargs
+    ) -> bool:
+        """
+        Set weights for validators on a specific subnet.
+        
+        Args:
+            netuid (int): The subnet ID.
+            weights (list[tuple[str, int]]): List of (destination_address, weight) tuples.
+            **kwargs: Additional arguments.
+            
+        Returns:
+            bool: True if setting weights was successful, False otherwise.
+        """
+        try:
+            if not self.weights:
+                if self.log_verbose:
+                    logging.error("Weights contract not initialized")
+                return False
+            
+            # Check if wallet is initialized
+            if not self.has_wallet():
+                if self.log_verbose:
+                    logging.error("No wallet initialized. Please use set_wallet_from_username() or set_wallet_from_private_key() first.")
+                raise RuntimeError("Wallet not initialized. Please initialize wallet before using set_weights.")
+            
+            if self.log_verbose:
+                logging.info(f"Setting weights for subnet {netuid}")
+                logging.info(f"Number of weight entries: {len(weights)}")
+                logging.info(f"Using wallet: {self.get_wallet_address()}")
+            
+            # Convert weights to the format expected by the contract
+            weight_structs = []
+            for dest, weight in weights:
+                weight_structs.append({
+                    "dest": dest,
+                    "weight": weight
+                })
+            
+            if self.log_verbose:
+                logging.info(f"Weight structs: {weight_structs}")
+            
+            # Get nonce
+            nonce = self.web3.eth.get_transaction_count(self.wallet.address)
+            
+            # Build transaction
+            gas_limit = kwargs.get('gas_limit', 300000)
+            tx = self.weights.functions.setWeights(netuid, weight_structs).build_transaction({
+                "from": self.wallet.address,
+                "nonce": nonce,
+                "gas": gas_limit,
+                "gasPrice": self.web3.eth.gas_price,
+            })
+            
+            # Sign transaction
+            signed = self.web3.eth.account.sign_transaction(tx, self.wallet.key)
+            
+            # Send transaction
+            tx_hash = self.web3.eth.send_raw_transaction(signed.raw_transaction)
+            
+            if self.log_verbose:
+                logging.info(f"Set weights transaction sent: {tx_hash.hex()}")
+            
+            # Wait for receipt
+            receipt = self.web3.eth.wait_for_transaction_receipt(tx_hash)
+            
+            if receipt.status == 1:
+                if self.log_verbose:
+                    logging.info(f"Weights set successfully in block {receipt.blockNumber}")
+                return True
+            else:
+                if self.log_verbose:
+                    logging.error(f"Set weights failed in block {receipt.blockNumber}")
+                return False
+                
+        except Exception as e:
+            if self.log_verbose:
+                logging.error(f"Failed to set weights: {e}")
+                import traceback
+                logging.error(f"Full traceback: {traceback.format_exc()}")
+            return False
+
+    def get_weights(self, netuid: int, validator: str, dest: str, block: Optional[int] = None) -> Optional[int]:
+        """
+        Get weight for a specific validator-destination pair on a subnet.
+        
+        Args:
+            netuid (int): The subnet ID.
+            validator (str): The validator address.
+            dest (str): The destination address.
+            block (Optional[int]): The blockchain block number for the query.
+            
+        Returns:
+            Optional[int]: Weight value if found, None otherwise.
+        """
+        try:
+            if not self.weights:
+                if self.log_verbose:
+                    logging.error("Weights contract not initialized")
+                return None
+            
+            if self.log_verbose:
+                logging.info(f"Getting weights for subnet {netuid}, validator {validator}, dest {dest}")
+            
+            # Call contract's weights function
+            weight = self.weights.functions.weights(netuid, validator, dest).call()
+            
+            if self.log_verbose:
+                logging.info(f"Weight: {weight}")
+            
+            return weight
+            
+        except Exception as e:
+            if self.log_verbose:
+                logging.error(f"Failed to get weights: {e}")
+            return None
+
+    def get_validator_weights(self, netuid: int, validator: str, block: Optional[int] = None) -> Optional[list[tuple[str, int]]]:
+        """
+        Get all weights set by a specific validator on a subnet.
+        Note: This requires additional contract methods or events to get all weights.
+        
+        Args:
+            netuid (int): The subnet ID.
+            validator (str): The validator address.
+            block (Optional[int]): The blockchain block number for the query.
+            
+        Returns:
+            Optional[list[tuple[str, int]]]: List of (destination, weight) tuples if found, None otherwise.
+        """
+        try:
+            if not self.weights:
+                if self.log_verbose:
+                    logging.error("Weights contract not initialized")
+                return None
+            
+            if self.log_verbose:
+                logging.info(f"Getting all weights for validator {validator} on subnet {netuid}")
+            
+            # Note: The current ABI doesn't have a method to get all weights for a validator
+            # This would require additional contract methods or event filtering
+            # For now, return None to indicate this functionality is not available
+            
+            if self.log_verbose:
+                logging.warning("Getting all validator weights not supported by current contract ABI")
+            
+            return None
+            
+        except Exception as e:
+            if self.log_verbose:
+                logging.error(f"Failed to get validator weights: {e}")
+            return None
 
     def serve_axon(self, netuid: int, axon: Axon, **kwargs) -> bool:
         return True

@@ -40,38 +40,147 @@ class Dendrite:
     """
     Dendrite is an HTTP client used to send requests to Axon servers.
     It supports synchronous and asynchronous operations, including basic request validation and error handling.
+    Only validators can start Dendrite clients.
     """
 
     def __init__(
         self,
-        username: Optional[str] = None,
-        password: Optional[str] = None,
+        username: str,
+        password: str,
         wallet_path: Optional[str] = None,
+        netuid: int = 1,
+        network: str = "mainnet",
         hetutensor = None
     ):
         """Initialize Dendrite
 
         Args:
-            username: Wallet username
-            password: Wallet password
+            username (str): Wallet username (required)
+            password (str): Wallet password (required)
             wallet_path: Wallet path
+            netuid (int): Subnet ID to operate on
+            network (str): Network name (mainnet, testnet, etc.)
             hetutensor: Hetutensor client instance
         """
+        # --- Network Configuration ---
+        self.netuid = netuid
+        self.network = network
+        
+        # --- Wallet ---
+        self.username = username
+        self.password = password
+        self.wallet_path = wallet_path
+        
         # Initialize Hetutensor client
         if hetutensor:
             self.hetu = hetutensor
         else:
             from hetu.hetu import Hetutensor
             self.hetu = Hetutensor(
-                username=username,
-                password=password,
-                wallet_path=wallet_path
+                network=self.network,
+                username=self.username,
+                password=self.password,
+                wallet_path=self.wallet_path,
+                log_verbose=True
             )
+        
+        # Initialize wallet if credentials provided
+        if self.username and self.password:
+            success = self.hetu.set_wallet_from_username(
+                self.username, 
+                self.password, 
+                self.wallet_path
+            )
+            if success:
+                self.wallet_address = self.hetu.get_wallet_address()
+                logging.info(f"Wallet initialized: {self.wallet_address}")
+            else:
+                logging.warning("Failed to initialize wallet")
+                self.wallet_address = None
+        else:
+            logging.warning("No wallet credentials provided")
+            self.wallet_address = None
+
+        # Validate validator status
+        self._validate_validator_status()
 
         # Basic attributes
         self.uuid = str(uuid.uuid1())
         self.external_ip = get_external_ip()
         self._session: Optional[aiohttp.ClientSession] = None
+
+    def _validate_validator_status(self):
+        """Validate that the user is a validator on the specified subnet."""
+        if not self.hetu or not self.wallet_address:
+            logging.error("Cannot validate validator status: no Hetutensor client or wallet")
+            raise RuntimeError("No Hetutensor client or wallet available")
+        
+        try:
+            # Check if wallet is a neuron
+            is_neuron = self.hetu.is_neuron(self.netuid, self.wallet_address)
+            if not is_neuron:
+                error_msg = (
+                    f"❌ Wallet {self.wallet_address} is not registered as a neuron on subnet {self.netuid}.\n"
+                    f"💡 You need to register as a neuron first before starting a Dendrite client.\n"
+                    f"   Use hetutensor.register_neuron() to register, or use the serve() method.\n"
+                    f"   Example: dendrite.serve(netuid={self.netuid})"
+                )
+                logging.error(error_msg)
+                raise RuntimeError(error_msg)
+            
+            # Check if wallet is a validator (not a miner)
+            is_validator = self.hetu.is_validator(self.netuid, self.wallet_address)
+            if not is_validator:
+                error_msg = (
+                    f"❌ Wallet {self.wallet_address} is not a validator on subnet {self.netuid}.\n"
+                    f"💡 Only validators can run Dendrite clients. Miners cannot run validation services.\n"
+                    f"   You need to register as a validator (not miner) on this subnet.\n"
+                    f"   Use hetutensor.register_neuron(is_validator_role=True) to register as a validator."
+                )
+                logging.error(error_msg)
+                raise RuntimeError(error_msg)
+            
+            # Get neuron info for additional validation
+            neuron_info = self.hetu.get_neuron_info(self.netuid, self.wallet_address)
+            if neuron_info:
+                is_active = neuron_info.get("is_active", False)
+                if not is_active:
+                    error_msg = (
+                        f"❌ Neuron {self.wallet_address} is not active on subnet {self.netuid}.\n"
+                        f"💡 Your neuron registration is inactive. You may need to:\n"
+                        f"   1. Wait for activation if recently registered\n"
+                        f"   2. Check if you have sufficient stake\n"
+                        f"   3. Contact network administrators if the issue persists"
+                    )
+                    logging.error(error_msg)
+                    raise RuntimeError(error_msg)
+                
+                logging.info(f"✅ Validator validation passed: {self.wallet_address} is an active validator on subnet {self.netuid}")
+                logging.info(f"   Stake: {neuron_info.get('stake', 'N/A')}")
+                logging.info(f"   Last Update: {neuron_info.get('last_update', 'N/A')}")
+            else:
+                logging.warning("Could not get detailed neuron info for validation")
+                
+        except Exception as e:
+            if isinstance(e, RuntimeError):
+                raise  # Re-raise our custom errors
+            logging.error(f"Failed to validate validator status: {e}")
+            raise RuntimeError(f"Validator validation failed: {e}")
+
+    def info(self) -> dict:
+        """Return client info."""
+        info = {
+            'uuid': self.uuid,
+            'external_ip': self.external_ip,
+            'netuid': self.netuid,
+            'network': self.network,
+            'username': self.username
+        }
+        
+        if self.wallet_address:
+            info['wallet_address'] = self.wallet_address
+            
+        return info
 
     @property
     async def session(self) -> aiohttp.ClientSession:
@@ -177,5 +286,132 @@ class Dendrite:
 
     def __del__(self):
         """Destructor"""
-        if self._session and not self._session.closed:
-            logging.warning("Dendrite session was not properly closed")
+        try:
+            if hasattr(self, '_session') and self._session and not self._session.closed:
+                logging.warning("Dendrite session was not properly closed")
+        except Exception:
+            pass  # Ignore errors during cleanup
+
+    def serve(
+        self,
+        netuid: Optional[int] = None,
+        hetutensor: Optional["Hetutensor"] = None,
+    ) -> "Dendrite":
+        """Start serving on network as a validator.
+        
+        Args:
+            netuid (Optional[int]): Network ID to serve on (overrides constructor netuid)
+            hetutensor (Optional[Hututensor]): Hetutensor client (overrides constructor)
+        """
+        try:
+            # Use provided parameters or fall back to constructor values
+            target_netuid = netuid if netuid is not None else self.netuid
+            target_hetutensor = hetutensor if hetutensor is not None else self.hetu
+            
+            if not target_hetutensor:
+                raise ValueError("No Hetutensor client available")
+
+            if not target_hetutensor.has_wallet():
+                raise ValueError("No wallet available")
+
+            # Check if already registered
+            wallet_address = target_hetutensor.get_wallet_address()
+            is_registered = target_hetutensor.is_neuron(target_netuid, wallet_address)
+            
+            if not is_registered:
+                # Register as validator neuron
+                success = target_hetutensor.register_neuron(
+                    netuid=target_netuid,
+                    is_validator_role=True,  # Register as validator
+                    axon_endpoint=self.external_ip,
+                    axon_port=0,  # Validators don't need axon ports
+                    prometheus_endpoint="",
+                    prometheus_port=0
+                )
+                if not success:
+                    raise ValueError("Failed to register validator neuron")
+                logging.info(f"Registered as validator neuron on subnet {target_netuid}")
+            else:
+                # Update service info
+                success = target_hetutensor.update_service(
+                    netuid=target_netuid,
+                    axon_endpoint=self.external_ip,
+                    axon_port=0,  # Validators don't need axon ports
+                    prometheus_endpoint="",
+                    prometheus_port=0
+                )
+                if not success:
+                    raise ValueError("Failed to update validator service info")
+                logging.info(f"Updated validator service info on subnet {target_netuid}")
+
+            # Update netuid if changed
+            if target_netuid != self.netuid:
+                self.netuid = target_netuid
+                logging.info(f"Switched to subnet {target_netuid}")
+
+            logging.info(f"✅ Dendrite client is now serving as validator on subnet {target_netuid}")
+            return self
+
+        except Exception as e:
+            logging.error(f"Failed to serve: {e}")
+            raise
+
+    def get_network_status(self) -> dict:
+        """Get current network status from hetutensor."""
+        try:
+            if not self.hetu:
+                return {"error": "No Hetutensor client available"}
+            
+            # Get basic network info
+            total_subnets = self.hetu.get_total_subnets()
+            current_block = self.hetu.get_current_block()
+            
+            return {
+                "total_subnets": total_subnets,
+                "current_block": current_block,
+                "network": self.network,
+                "netuid": self.netuid
+            }
+        except Exception as e:
+            return {"error": f"Failed to get network status: {e}"}
+
+    def get_available_services(self) -> list:
+        """Get list of available compute services (axons) from current subnet."""
+        try:
+            if not self.hetu:
+                return []
+            
+            # Get miners (compute services) from current subnet
+            miners = self.hetu.get_subnet_miners(self.netuid)
+            return [{"address": addr, "type": "miner"} for addr in miners]
+        except Exception as e:
+            logging.warning(f"Failed to get available services: {e}")
+            return []
+
+    def get_available_validators(self) -> list:
+        """Get list of available validators (dendrites) from current subnet."""
+        try:
+            if not self.hetu:
+                return []
+            
+            # Get validators from current subnet
+            validators = self.hetu.get_subnet_validators(self.netuid)
+            return [{"address": addr, "type": "validator"} for addr in validators]
+        except Exception as e:
+            logging.warning(f"Failed to get available validators: {e}")
+            return []
+
+    def is_network_healthy(self) -> bool:
+        """Check if the network is healthy based on current subnet data."""
+        try:
+            if not self.hetu:
+                return False
+            
+            # Check if subnet exists and is active
+            subnet_exists = self.hetu.is_subnet_exists(self.netuid)
+            subnet_active = self.hetu.is_subnet_active(self.netuid)
+            
+            return subnet_exists and subnet_active
+        except Exception as e:
+            logging.warning(f"Failed to check network health: {e}")
+            return False
