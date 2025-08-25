@@ -79,8 +79,8 @@ class Axon:
 
     def __init__(
         self,
-        username: str,
-        password: str,
+        username: str = None,
+        password: str = None,
         wallet_path: Optional[str] = None,
         port: Optional[int] = None,
         ip: Optional[str] = None,
@@ -91,12 +91,13 @@ class Axon:
         netuid: int = 1,
         network: str = "mainnet",
         hetutensor: Optional["Hetutensor"] = None,
+        wallet: Optional["Account"] = None,
     ):
         """Initialize the Axon server.
         
         Args:
-            username (str): Wallet username (required)
-            password (str): Wallet password (required)
+            username (str): Wallet username (optional if wallet is provided)
+            password (str): Wallet password (deprecated, use wallet parameter instead)
             wallet_path (Optional[str]): Custom wallet path
             port (Optional[int]): Server port
             ip (Optional[str]): Server IP
@@ -107,6 +108,7 @@ class Axon:
             netuid (int): Subnet ID to operate on
             network (str): Network name (mainnet, testnet, etc.)
             hetutensor (Optional[Hututensor]): Hetutensor client instance
+            wallet (Optional[Account]): Pre-initialized wallet Account object
         """
         # --- Server Config ---
         self.ip = ip or os.getenv("HOST_IP", "127.0.0.1")
@@ -124,6 +126,7 @@ class Axon:
         self.username = username
         self.password = password
         self.wallet_path = wallet_path
+        self.wallet = wallet  # Add this line to store the wallet object
 
         # --- Server ---
         self.started = False
@@ -167,28 +170,39 @@ class Axon:
         try:
             from hetu.hetu import Hetutensor
             
-            self.hetutensor = Hetutensor(
-                network=self.network,
-                username=self.username,
-                password=self.password,
-                wallet_path=self.wallet_path,
-                log_verbose=self.trace
-            )
-            
-            # Set wallet if credentials provided
-            if self.username and self.password:
-                success = self.hetutensor.set_wallet_from_username(
-                    self.username, 
-                    self.password, 
-                    self.wallet_path
+            if hasattr(self, 'wallet') and self.wallet:
+                # Use pre-initialized wallet
+                self.hetutensor = Hetutensor(
+                    network=self.network,
+                    wallet=self.wallet,
+                    wallet_path=self.wallet_path,
+                    log_verbose=self.trace
                 )
-                if success:
-                    self.wallet_address = self.hetutensor.get_wallet_address()
-                    logging.info(f"Wallet initialized: {self.wallet_address}")
-                else:
-                    logging.warning("Failed to initialize wallet")
+                # Set wallet address immediately for pre-initialized wallet
+                self.wallet_address = self.wallet.address
+                logging.info(f"Using pre-initialized wallet: {self.wallet_address}")
             else:
-                logging.warning("No wallet credentials provided")
+                # Use username-based initialization
+                self.hetutensor = Hetutensor(
+                    network=self.network,
+                    username=self.username,
+                    wallet_path=self.wallet_path,
+                    log_verbose=self.trace
+                )
+                
+                # Set wallet if credentials provided
+                if self.username:
+                    success = self.hetutensor.set_wallet_from_username(
+                        self.username, 
+                        self.wallet_path
+                    )
+                    if success:
+                        self.wallet_address = self.hetutensor.get_wallet_address()
+                        logging.info(f"Wallet initialized: {self.wallet_address}")
+                    else:
+                        logging.warning("Failed to initialize wallet")
+                else:
+                    logging.warning("No wallet credentials provided")
                 
         except Exception as e:
             logging.error(f"Failed to initialize Hetutensor: {e}")

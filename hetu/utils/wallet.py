@@ -55,13 +55,12 @@ def load_keystore(address_or_name: str, wallet_path: Optional[str] = None) -> di
     raise FileNotFoundError(f"Keystore file not found for: {address_or_name}")
 
 
-def unlock_wallet(name_or_address: str, password: str, wallet_path: Optional[str] = None) -> Account:
+def unlock_wallet(name_or_address: str, wallet_path: Optional[str] = None) -> Account:
     """
-    Unlock a wallet from keystore file.
+    Unlock a wallet from keystore file with interactive password input.
     
     Args:
         name_or_address (str): Wallet name or address.
-        password (str): Wallet password.
         wallet_path (Optional[str]): Wallet path.
         
     Returns:
@@ -69,9 +68,40 @@ def unlock_wallet(name_or_address: str, password: str, wallet_path: Optional[str
     """
     try:
         keystore = load_keystore(name_or_address, wallet_path)
-        privkey = Account.decrypt(keystore, password)
-        acct = Account.from_key(privkey)
-        return acct
+        
+        # Interactive password input
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                if attempt > 0:
+                    print(f"⚠️  Password incorrect. Attempt {attempt + 1}/{max_attempts}")
+                
+                password = getpass.getpass(f"Enter password for wallet '{name_or_address}': ")
+                if not password:
+                    print("❌ Password cannot be empty")
+                    continue
+                
+                # Try to decrypt
+                privkey = Account.decrypt(keystore, password)
+                acct = Account.from_key(privkey)
+                
+                print(f"✅ Wallet unlocked successfully: {acct.address}")
+                return acct
+                
+            except ValueError as e:
+                if "Invalid password" in str(e) or "Decryption failed" in str(e):
+                    continue  # Try again
+                else:
+                    raise e  # Re-raise other ValueError exceptions
+            except KeyboardInterrupt:
+                print("\n🛑 Password input cancelled by user")
+                raise KeyboardInterrupt("Password input cancelled")
+            except Exception as e:
+                print(f"❌ Unexpected error: {e}")
+                raise e
+        
+        # If we get here, all attempts failed
+        raise ValueError(f"Failed to unlock wallet after {max_attempts} attempts")
         
     except Exception as e:
         raise e
@@ -215,7 +245,7 @@ def get_wallet_balance(hetu_client, name_or_address: str, password: Optional[str
             raise ValueError("Password required when using wallet name")
         
         try:
-            account = unlock_wallet(name_or_address, password, wallet_path)
+            account = unlock_wallet(name_or_address, wallet_path)
             address = account.address
         except Exception as e:
             raise e
@@ -241,7 +271,7 @@ def prompt_for_wallet_and_password(wallet_path: Optional[str] = None) -> tuple[A
         name = input("Enter wallet name: ")
         password = getpass.getpass("Enter password: ")
         wallet_info = create_wallet(name, password, wallet_path)
-        account = unlock_wallet(name, password, wallet_path)
+        account = unlock_wallet(name, wallet_path)
         return account, name
     
     print("Available wallets:")
@@ -255,14 +285,14 @@ def prompt_for_wallet_and_password(wallet_path: Optional[str] = None) -> tuple[A
                 name = input("Enter wallet name: ")
                 password = getpass.getpass("Enter password: ")
                 wallet_info = create_wallet(name, password, wallet_path)
-                account = unlock_wallet(name, password, wallet_path)
+                account = unlock_wallet(name, wallet_path)
                 return account, name
             else:
                 idx = int(choice) - 1
                 if 0 <= idx < len(wallets):
                     wallet = wallets[idx]
                     password = getpass.getpass(f"Enter password for {wallet['name']}: ")
-                    account = unlock_wallet(wallet['name'], password, wallet_path)
+                    account = unlock_wallet(wallet['name'], wallet_path)
                     return account, wallet['name']
                 else:
                     print("Invalid choice. Please try again.")

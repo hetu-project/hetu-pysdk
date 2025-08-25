@@ -39,6 +39,7 @@ class Hetutensor(HetutensorMixin):
         username: Optional[str] = None,
         password: Optional[str] = None,
         wallet_path: Optional[str] = None,
+        wallet: Optional["Account"] = None,
     ):
         """
         Initializes an instance of the HetuClient class for EVM/ETH networks.
@@ -51,8 +52,9 @@ class Hetutensor(HetutensorMixin):
             retry_forever (bool): Retry forever on connection errors.
             _mock (bool): Enable mock mode.
             username (Optional[str]): Wallet username/name.
-            password (Optional[str]): Wallet password.
+            password (Optional[str]): Wallet password (deprecated, use wallet parameter instead).
             wallet_path (Optional[str]): Custom wallet path.
+            wallet (Optional[Account]): Pre-initialized wallet Account object.
         """
         self.network = network or "local"
         self._config = config
@@ -71,7 +73,15 @@ class Hetutensor(HetutensorMixin):
         self._init_contract()
         
         # Initialize wallet
-        self._init_wallet(username, password, wallet_path)
+        if wallet:
+            # Use pre-initialized wallet
+            self.wallet = wallet
+            self.wallet_name = f"imported_{wallet.address[:8]}"
+            if self.log_verbose:
+                logging.info(f"Using pre-initialized wallet: {wallet.address}")
+        else:
+            # Initialize wallet from credentials
+            self._init_wallet(username, password, wallet_path)
 
     def _init_wallet(self, username: Optional[str] = None, password: Optional[str] = None, wallet_path: Optional[str] = None):
         """
@@ -79,7 +89,7 @@ class Hetutensor(HetutensorMixin):
         
         Args:
             username (Optional[str]): Wallet username
-            password (Optional[str]): Wallet password
+            password (Optional[str]): Wallet password (deprecated, use interactive input instead)
             wallet_path (Optional[str]): Wallet path
         """
         from hetu.utils.wallet import unlock_wallet
@@ -88,25 +98,24 @@ class Hetutensor(HetutensorMixin):
         self.wallet_name = None
         self.wallet_path = wallet_path
         
-        if username and password:
-            # Unlock wallet with provided username and password
+        if username:
+            # Unlock wallet with interactive password input
             try:
-                self.wallet = unlock_wallet(username, password, wallet_path)
+                self.wallet = unlock_wallet(username, wallet_path)
                 self.wallet_name = username
                 if self.log_verbose:
                     logging.info(f"Unlocked wallet: {self.wallet.address}")
             except Exception as e:
                 if self.log_verbose:
-                    logging.error(f"Failed to unlock wallet with provided credentials: {e}")
+                    logging.error(f"Failed to unlock wallet with username '{username}': {e}")
                 raise e
 
-    def set_wallet_from_username(self, username: str, password: str, wallet_path: Optional[str] = None) -> bool:
+    def set_wallet_from_username(self, username: str, wallet_path: Optional[str] = None) -> bool:
         """
-        Set wallet from username and password
+        Set wallet from username with interactive password input
         
         Args:
             username (str): Wallet username
-            password (str): Wallet password
             wallet_path (Optional[str]): Wallet path
             
         Returns:
@@ -115,7 +124,7 @@ class Hetutensor(HetutensorMixin):
         from hetu.utils.wallet import unlock_wallet
         
         try:
-            self.wallet = unlock_wallet(username, password, wallet_path or self.wallet_path)
+            self.wallet = unlock_wallet(username, wallet_path or self.wallet_path)
             self.wallet_name = username
             if self.log_verbose:
                 logging.info(f"Set wallet from username: {self.wallet.address}")
@@ -858,12 +867,12 @@ class Hetutensor(HetutensorMixin):
         
         # Contract address configuration
         self.contract_addresses = {
-            "WHETU_TOKEN": "0xBC45C2511eA43F998E659b4722D6795C482a7E07",
+            "WHETU_TOKEN": "0xfe69e0FE06b18d5c72C58655B529d1E73d6B0548",
             "AMM_FACTORY": "0x36607E8D2cb850E3b2d14b998A25c43611d710cE", 
-            "GLOBAL_STAKING": "0x9cCb4A38a208409422969737977696B8189eF96a",
-            "SUBNET_MANAGER": "0xaF856443EaF741eEcAD2b5Bb3ff6F9F57a00920F",
-            "NEURON_MANAGER": "0x34d3911323Ef5576Ba84a5a68b814D189112020F",
-            "WEIGHTS": "0x1011c3586a901FBea4DEB3df16cFC42922219D86"
+            "GLOBAL_STAKING": "0x748b0Ca05E66E6Df955A560EEE51AAEf547B780A",
+            "SUBNET_MANAGER": "0x1B81138Dca6B91ABe7C5df9c3CE5C02284Fa6437",
+            "NEURON_MANAGER": "0x71EE41B2ee3E79534CBed5e4C083AeF6B949D571",
+            "WEIGHTS": "0x721A394944dEf6cfF85F5Ad9c61322019e3db650"
         }
         
         # Contract ABI file path

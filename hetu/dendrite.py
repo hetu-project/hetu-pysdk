@@ -45,22 +45,24 @@ class Dendrite:
 
     def __init__(
         self,
-        username: str,
-        password: str,
+        username: str = None,
+        password: str = None,
         wallet_path: Optional[str] = None,
         netuid: int = 1,
         network: str = "mainnet",
-        hetutensor = None
+        hetutensor = None,
+        wallet: Optional["Account"] = None,
     ):
         """Initialize Dendrite
 
         Args:
-            username (str): Wallet username (required)
-            password (str): Wallet password (required)
+            username (str): Wallet username (optional if wallet is provided)
+            password (str): Wallet password (deprecated, use wallet parameter instead)
             wallet_path: Wallet path
             netuid (int): Subnet ID to operate on
             network (str): Network name (mainnet, testnet, etc.)
             hetutensor: Hetutensor client instance
+            wallet (Optional[Account]): Pre-initialized wallet Account object
         """
         # --- Network Configuration ---
         self.netuid = netuid
@@ -68,7 +70,7 @@ class Dendrite:
         
         # --- Wallet ---
         self.username = username
-        self.password = password
+        self.password = password  # Deprecated
         self.wallet_path = wallet_path
         
         # Initialize Hetutensor client
@@ -76,19 +78,31 @@ class Dendrite:
             self.hetu = hetutensor
         else:
             from hetu.hetu import Hetutensor
-            self.hetu = Hetutensor(
-                network=self.network,
-                username=self.username,
-                password=self.password,
-                wallet_path=self.wallet_path,
-                log_verbose=True
-            )
+            if wallet:
+                # Use pre-initialized wallet
+                self.hetu = Hetutensor(
+                    network=self.network,
+                    wallet=wallet,
+                    log_verbose=True
+                )
+            else:
+                # Use username-based initialization
+                self.hetu = Hetutensor(
+                    network=self.network,
+                    username=self.username,
+                    wallet_path=self.wallet_path,
+                    log_verbose=True
+                )
         
         # Initialize wallet if credentials provided
-        if self.username and self.password:
+        if wallet:
+            # Use pre-initialized wallet - no need to call set_wallet_from_username
+            self.wallet_address = wallet.address
+            logging.info(f"Using pre-initialized wallet: {self.wallet_address}")
+        elif self.username:
+            # Only call set_wallet_from_username if no wallet object was provided
             success = self.hetu.set_wallet_from_username(
                 self.username, 
-                self.password, 
                 self.wallet_path
             )
             if success:
