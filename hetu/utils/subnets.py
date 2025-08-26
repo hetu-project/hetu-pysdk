@@ -3,8 +3,8 @@ from typing import Any, Union, Optional, TYPE_CHECKING
 
 from eth_account import Account
 
-from hetu.axon import Axon
-from hetu.dendrite import Dendrite
+from hetu.xylem import Xylem
+from hetu.phloem import Phloem
 from hetu.utils.btlogging import logging
 
 # For annotation purposes
@@ -18,7 +18,7 @@ class SubnetsAPI(ABC):
 
     def __init__(self, account: Account):
         self.account = account
-        self.dendrite = Dendrite(account=account)
+        self.phloem = Phloem(wallet=account)
 
     async def __call__(self, *args, **kwargs):
         return await self.query_api(*args, **kwargs)
@@ -52,10 +52,9 @@ class SubnetsAPI(ABC):
         """
         synapse = self.prepare_synapse(**kwargs)
         logging.debug(f"Querying validator axons with synapse {synapse.name}...")
-        responses = await self.dendrite(
-            axons=axons,
+        responses = await self.phloem.forward_to_multiple(
             synapse=synapse,
-            deserialize=deserialize,
-            timeout=timeout,
+            target_xylems=axons,
+            timeout=timeout
         )
         return self.process_responses(responses)

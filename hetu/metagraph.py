@@ -71,8 +71,8 @@ class MetagraphMixin(ABC):
         self.hyperparameters = {}
         
         # Neuron collections
-        self.axons: List[NeuronInfo] = []      # Miner neurons (non-validator)
-        self.dendrites: List[NeuronInfo] = []  # Validator neurons
+        self.xylems: List[NeuronInfo] = []      # Miner neurons (non-validator)
+        self.phloems: List[NeuronInfo] = []  # Validator neurons
         
         # Cached data for performance
         self._neuron_cache: Dict[str, NeuronInfo] = {}
@@ -140,13 +140,13 @@ class MetagraphMixin(ABC):
             
             if not neuron_addresses:
                 logging.warning(f"No neurons found in subnet {self.netuid}")
-                self.axons.clear()
-                self.dendrites.clear()
+                self.xylems.clear()
+                self.phloems.clear()
                 return
             
             # Clear existing collections
-            self.axons.clear()
-            self.dendrites.clear()
+            self.xylems.clear()
+            self.phloems.clear()
             self._neuron_cache.clear()
             
             # Process each neuron
@@ -162,11 +162,11 @@ class MetagraphMixin(ABC):
                             # Cache the neuron
                             self._neuron_cache[address] = neuron
                             
-                            # Separate into axons (miners) and dendrites (validators)
+                            # Separate into xylems (miners) and phloems (validators)
                             if neuron_info.get("is_validator", False):
-                                self.dendrites.append(neuron)
+                                self.phloems.append(neuron)
                             else:
-                                self.axons.append(neuron)
+                                self.xylems.append(neuron)
                         else:
                             logging.warning(f"Failed to create NeuronInfo for {address}")
                     else:
@@ -176,7 +176,7 @@ class MetagraphMixin(ABC):
                     logging.error(f"Error processing neuron {address}: {e}")
                     continue
             
-            logging.info(f"Synced {len(self.axons)} axons (miners) and {len(self.dendrites)} dendrites (validators) for subnet {self.netuid}")
+            logging.info(f"Synced {len(self.xylems)} xylems (miners) and {len(self.phloems)} phloems (validators) for subnet {self.netuid}")
             
             # Update cache timestamp
             self._cache_timestamp = time.time()
@@ -223,22 +223,22 @@ class MetagraphMixin(ABC):
                 stake=stake_balance,
                 stake_dict=stake_dict,
                 total_stake=stake_balance,
-                rank=0.0,
-                emission=0.0,
-                incentive=0.0,
-                consensus=0.0,
-                trust=0.0,
-                validator_trust=0.0,
-                dividends=0.0,
-                last_update=neuron_info.get("last_update", 0),
-                validator_permit=neuron_info.get("is_validator", False),
-                weights=[],
-                bonds=[],
-                pruning_score=0,
-                prometheus_info=None,
+                        rank=0.0,
+                        emission=0.0,
+                        incentive=0.0,
+                        consensus=0.0,
+                        trust=0.0,
+                        validator_trust=0.0,
+                        dividends=0.0,
+                        last_update=neuron_info.get("last_update", 0),
+                        validator_permit=neuron_info.get("is_validator", False),
+                        weights=[],
+                        bonds=[],
+                        pruning_score=0,
+                        prometheus_info=None,
                 axon_info=axon_info,
-                is_null=False
-            )
+                        is_null=False
+                    )
             
             return neuron
             
@@ -277,59 +277,59 @@ class MetagraphMixin(ABC):
                 # Return None if we can't even create a fallback
                 return None
 
-    def get_axons(self, force_sync: bool = False) -> List[NeuronInfo]:
+    def get_xylems(self, force_sync: bool = False) -> List[NeuronInfo]:
         """
-        Get list of miner neurons (axons).
+        Get list of miner neurons (xylems).
         
         Args:
             force_sync (bool): Force sync before returning axons
             
         Returns:
-            List[NeuronInfo]: List of axon neurons
+            List[NeuronInfo]: List of xylem neurons
         """
         if force_sync:
             self.sync(force=True)
-        return self.axons
+        return self.xylems
 
-    def get_dendrites(self, force_sync: bool = False) -> List[NeuronInfo]:
+    def get_phloems(self, force_sync: bool = False) -> List[NeuronInfo]:
         """
-        Get list of validator neurons (dendrites).
+        Get list of validator neurons (phloems).
         
         Args:
             force_sync (bool): Force sync before returning dendrites
             
         Returns:
-            List[NeuronInfo]: List of dendrite neurons
+            List[NeuronInfo]: List of phloem neurons
         """
         if force_sync:
             self.sync(force=True)
-        return self.dendrites
+        return self.phloems
 
-    def get_active_axons(self, force_sync: bool = False) -> List[NeuronInfo]:
+    def get_active_xylems(self, force_sync: bool = False) -> List[NeuronInfo]:
         """
-        Get list of active miner neurons (axons).
+        Get list of active miner neurons (xylems).
         
         Args:
             force_sync (bool): Force sync before returning axons
             
         Returns:
-            List[NeuronInfo]: List of active axon neurons
+            List[NeuronInfo]: List of active xylem neurons
         """
-        axons = self.get_axons(force_sync)
-        return [axon for axon in axons if axon.active]
+        xylems = self.get_xylems(force_sync)
+        return [xylem for xylem in xylems if xylem.active]
 
-    def get_active_dendrites(self, force_sync: bool = False) -> List[NeuronInfo]:
+    def get_active_phloems(self, force_sync: bool = False) -> List[NeuronInfo]:
         """
-        Get list of active validator neurons (dendrites).
+        Get list of active validator neurons (phloems).
         
         Args:
             force_sync (bool): Force sync before returning dendrites
             
         Returns:
-            List[NeuronInfo]: List of active dendrite neurons
+            List[NeuronInfo]: List of active phloem neurons
         """
-        dendrites = self.get_dendrites(force_sync)
-        return [dendrite for dendrite in dendrites if dendrite.active]
+        phloems = self.get_phloems(force_sync)
+        return [phloem for phloem in phloems if phloem.active]
 
     def get_neuron_by_address(self, address: str, force_sync: bool = False) -> Optional[NeuronInfo]:
         """
@@ -349,8 +349,8 @@ class MetagraphMixin(ABC):
         if address in self._neuron_cache:
             return self._neuron_cache[address]
         
-        # Search in axons and dendrites
-        for neuron in self.axons + self.dendrites:
+        # Search in xylems and phloems
+        for neuron in self.xylems + self.phloems:
             if neuron.hotkey == address:
                 return neuron
         return None
@@ -369,34 +369,34 @@ class MetagraphMixin(ABC):
         if force_sync:
             self.sync(force=True)
         
-        for neuron in self.axons + self.dendrites:
+        for neuron in self.xylems + self.phloems:
             if neuron.uid == uid:
                 return neuron
         return None
 
-    def get_neurons_with_axon_endpoints(self, force_sync: bool = False) -> List[NeuronInfo]:
+    def get_neurons_with_xylem_endpoints(self, force_sync: bool = False) -> List[NeuronInfo]:
         """
-        Get neurons that have valid axon endpoints.
+        Get neurons that have valid xylem endpoints.
         
         Args:
             force_sync (bool): Force sync before returning neurons
             
         Returns:
-            List[NeuronInfo]: List of neurons with axon endpoints
+            List[NeuronInfo]: List of neurons with xylem endpoints
         """
         if force_sync:
             self.sync(force=True)
         
         neurons_with_endpoints = []
-        for neuron in self.axons + self.dendrites:
+        for neuron in self.xylems + self.phloems:
             if neuron.axon_info and neuron.axon_info.ip and neuron.axon_info.port > 0:
                 neurons_with_endpoints.append(neuron)
         
         return neurons_with_endpoints
 
-    def get_axon_endpoints(self, force_sync: bool = False) -> List[Dict[str, Any]]:
+    def get_xylem_endpoints(self, force_sync: bool = False) -> List[Dict[str, Any]]:
         """
-        Get list of axon endpoints with their information.
+        Get list of xylem endpoints with their information.
         
         Args:
             force_sync (bool): Force sync before returning endpoints
@@ -404,25 +404,25 @@ class MetagraphMixin(ABC):
         Returns:
             List[Dict[str, Any]]: List of endpoint information
         """
-        axons = self.get_active_axons(force_sync)
+        xylems = self.get_active_xylems(force_sync)
         endpoints = []
         
-        for axon in axons:
-            if axon.axon_info and axon.axon_info.ip and axon.axon_info.port > 0:
+        for xylem in xylems:
+            if xylem.axon_info and xylem.axon_info.ip and xylem.axon_info.port > 0:
                 endpoints.append({
-                    "address": axon.hotkey,
-                    "ip": axon.axon_info.ip,
-                    "port": axon.axon_info.port,
-                    "stake": axon.stake,
-                    "active": axon.active,
-                    "last_update": axon.last_update
+                    "address": xylem.hotkey,
+                    "ip": xylem.axon_info.ip,
+                    "port": xylem.axon_info.port,
+                    "stake": xylem.stake,
+                    "active": xylem.active,
+                    "last_update": xylem.last_update
                 })
         
         return endpoints
 
-    def get_dendrite_endpoints(self, force_sync: bool = False) -> List[Dict[str, Any]]:
+    def get_phloem_endpoints(self, force_sync: bool = False) -> List[Dict[str, Any]]:
         """
-        Get list of dendrite endpoints with their information.
+        Get list of phloem endpoints with their information.
         
         Args:
             force_sync (bool): Force sync before returning endpoints
@@ -430,18 +430,18 @@ class MetagraphMixin(ABC):
         Returns:
             List[Dict[str, Any]]: List of endpoint information
         """
-        dendrites = self.get_active_dendrites(force_sync)
+        phloems = self.get_active_phloems(force_sync)
         endpoints = []
         
-        for dendrite in dendrites:
-            if dendrite.axon_info and dendrite.axon_info.ip and dendrite.axon_info.port > 0:
+        for phloem in phloems:
+            if phloem.axon_info and phloem.axon_info.ip and phloem.axon_info.port > 0:
                 endpoints.append({
-                    "address": dendrite.hotkey,
-                    "ip": dendrite.axon_info.ip,
-                    "port": dendrite.axon_info.port,
-                    "stake": dendrite.stake,
-                    "active": dendrite.active,
-                    "last_update": dendrite.last_update
+                    "address": phloem.hotkey,
+                    "ip": phloem.axon_info.ip,
+                    "port": phloem.axon_info.port,
+                    "stake": phloem.stake,
+                    "active": phloem.active,
+                    "last_update": phloem.last_update
                 })
         
         return endpoints
@@ -459,20 +459,20 @@ class MetagraphMixin(ABC):
         if force_sync:
             self.sync(force=True)
         
-        total_stake = sum(neuron.stake for neuron in self.axons + self.dendrites)
-        active_axons = len(self.get_active_axons())
-        active_dendrites = len(self.get_active_dendrites())
+        total_stake = sum(neuron.stake for neuron in self.xylems + self.phloems)
+        active_xylems = len(self.get_active_xylems())
+        active_phloems = len(self.get_active_phloems())
         
         return {
             "netuid": self.netuid,
             "network": self.network,
             "block": self.block,
             "is_active": self.is_active,
-            "total_neurons": len(self.axons) + len(self.dendrites),
-            "total_axons": len(self.axons),
-            "total_dendrites": len(self.dendrites),
-            "active_axons": active_axons,
-            "active_dendrites": active_dendrites,
+            "total_neurons": len(self.xylems) + len(self.phloems),
+            "total_xylems": len(self.xylems),
+            "total_phloems": len(self.phloems),
+            "active_xylems": active_xylems,
+            "active_phloems": active_phloems,
             "total_stake": total_stake,
             "last_sync": self.last_sync,
             "hyperparameters": self.hyperparameters
@@ -489,7 +489,7 @@ class MetagraphMixin(ABC):
 
     def __str__(self) -> str:
         """String representation of metagraph."""
-        return f"metagraph(netuid:{self.netuid}, block:{self.block}, network:{self.network}, axons:{len(self.axons)}, dendrites:{len(self.dendrites)})"
+        return f"metagraph(netuid:{self.netuid}, block:{self.block}, network:{self.network}, xylems:{len(self.xylems)}, phloems:{len(self.phloems)})"
 
     def __repr__(self) -> str:
         """Detailed string representation."""
@@ -502,8 +502,8 @@ class MetagraphMixin(ABC):
             "block": self.block,
             "network": self.network,
             "version": settings.__version__,
-            "axon_count": len(self.axons),
-            "dendrite_count": len(self.dendrites),
+            "xylem_count": len(self.xylems),
+            "phloem_count": len(self.phloems),
             "last_sync": self.last_sync,
             "cache_valid": self.is_cache_valid(),
         }
@@ -516,8 +516,8 @@ class MetagraphMixin(ABC):
             "block": self.block,
             "is_active": self.is_active,
             "hyperparameters": self.hyperparameters,
-            "axons": [axon.__dict__ for axon in self.axons],
-            "dendrites": [dendrite.__dict__ for dendrite in self.dendrites],
+            "xylems": [xylem.__dict__ for xylem in self.xylems],
+            "phloems": [phloem.__dict__ for phloem in self.phloems],
             "last_sync": self.last_sync,
             "cache_timestamp": self._cache_timestamp,
         }

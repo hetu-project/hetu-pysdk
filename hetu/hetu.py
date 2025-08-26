@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 from numpy.typing import NDArray
 from web3 import Web3, HTTPProvider
 
-from hetu.axon import Axon
+from hetu.xylem import Xylem
 from hetu.chain_data import (
     DynamicInfo,
     MetagraphInfo,
@@ -1545,8 +1545,8 @@ class Hetutensor(HetutensorMixin):
         return True
 
     def set_weights(
-        self, 
-        netuid: int, 
+        self,
+        netuid: int,
         weights: list[tuple[str, int]], 
         **kwargs
     ) -> bool:
@@ -1700,7 +1700,7 @@ class Hetutensor(HetutensorMixin):
                 logging.error(f"Failed to get validator weights: {e}")
             return None
 
-    def serve_axon(self, netuid: int, axon: Axon, **kwargs) -> bool:
+    def serve_xylem(self, netuid: int, xylem: Xylem, **kwargs) -> bool:
         return True
 
     def start_call(self, wallet: "Account", netuid: int, **kwargs) -> tuple[bool, str]:

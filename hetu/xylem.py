@@ -1,4 +1,4 @@
-"""Create and initialize Axon, which services the forward and backward requests from other neurons."""
+"""Create and initialize Xylem, which services the forward and backward requests from other neurons."""
 
 import os
 import time
@@ -7,20 +7,21 @@ import logging
 import asyncio
 import threading
 import contextlib
-from typing import Optional, Callable, Any, Union
+from typing import Optional, Callable, Any, Union, Dict, List
 from starlette.types import ASGIApp
 from starlette.requests import Request
 from starlette.responses import Response, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
+from inspect import signature, Signature, Parameter
 
 from hetu.utils.priority import PriorityThreadPoolExecutor
-from hetu.synapse import Synapse
+from hetu.synapse import Synapse,BaseSynapse
 
 class FastAPIThreadedServer(uvicorn.Server):
     """
     The FastAPIThreadedServer class runs the FastAPI application in a separate thread.
-    This allows the Axon server to handle HTTP requests concurrently.
+    This allows the Xylem server to handle HTTP requests concurrently.
     """
 
     should_exit: bool = False
@@ -71,10 +72,10 @@ class FastAPIThreadedServer(uvicorn.Server):
             except:
                 pass
 
-class Axon:
+class Xylem:
     """
-    The Axon class provides a FastAPI-based HTTP server for handling network requests.
-    It supports basic authentication, request prioritization, and health checks.
+    The Xylem class provides a FastAPI-based HTTP server for handling network requests.
+    It supports multiple services, request prioritization, and health checks.
     """
 
     def __init__(
@@ -93,7 +94,7 @@ class Axon:
         hetutensor: Optional["Hetutensor"] = None,
         wallet: Optional["Account"] = None,
     ):
-        """Initialize the Axon server.
+        """Initialize the Xylem server.
         
         Args:
             username (str): Wallet username (optional if wallet is provided)
@@ -131,28 +132,30 @@ class Axon:
         # --- Server ---
         self.started = False
         self.thread_pool = PriorityThreadPoolExecutor(max_workers=self.max_workers)
-        self.forward_fn = None
-        self.blacklist_fn = None
-        self.priority_fn = None
-        self.verify_fn = None
+
+        # --- Function Registry (支持多个服务) ---
+        self.forward_class_types: Dict[str, type] = {}
+        self.blacklist_fns: Dict[str, Optional[Callable]] = {}
+        self.priority_fns: Dict[str, Optional[Callable]] = {}
+        self.forward_fns: Dict[str, Optional[Callable]] = {}
+        self.verify_fns: Dict[str, Optional[Callable]] = {}
 
         # --- Hetutensor ---
         self.hetutensor = hetutensor
         self.wallet_address = None
         
-        # Initialize Hetutensor if not provided
-        if not self.hetutensor:
-            self._init_hetutensor()
-        
-        # Validate miner status
-        self._validate_miner_status()
-
         # --- FastAPI ---
         self.app = FastAPI()
+        self.router = APIRouter()
+        
+        # Add middleware first
         self.app.add_middleware(
-            AxonMiddleware,
-            axon=self
+            XylemMiddleware,
+            xylem=self
         )
+        
+        # Include router after middleware
+        self.app.include_router(self.router)
 
         # --- Default endpoints ---
         @self.app.post("/ping")
@@ -164,6 +167,13 @@ class Axon:
         def ping_get():
             """GET ping endpoint for simple health check."""
             return {"completion": "pong", "status": "ok"}
+
+        # Initialize Hetutensor if not provided
+        if not self.hetutensor:
+            self._init_hetutensor()
+        
+        # Validate miner status (moved after FastAPI initialization)
+        self._validate_miner_status()
 
     def _init_hetutensor(self):
         """Initialize Hetutensor client if not provided."""
@@ -220,9 +230,9 @@ class Axon:
             if not is_neuron:
                 error_msg = (
                     f"❌ Wallet {self.wallet_address} is not registered as a neuron on subnet {self.netuid}.\n"
-                    f"💡 You need to register as a neuron first before starting an Axon server.\n"
+                    f"💡 You need to register as a neuron first before starting an Xylem server.\n"
                     f"   Use hetutensor.register_neuron() to register, or use the serve() method.\n"
-                    f"   Example: axon.serve(netuid={self.netuid})"
+                    f"   Example: xylem.serve(netuid={self.netuid})"
                 )
                 logging.error(error_msg)
                 raise RuntimeError(error_msg)
@@ -232,7 +242,7 @@ class Axon:
             if not is_miner:
                 error_msg = (
                     f"❌ Wallet {self.wallet_address} is not a miner on subnet {self.netuid}.\n"
-                    f"💡 Only miners can run Axon servers. Validators cannot run compute services.\n"
+                    f"💡 Only miners can run Xylem servers. Validators cannot run compute services.\n"
                     f"   You need to register as a miner (not validator) on this subnet.\n"
                     f"   Use hetutensor.register_neuron(is_validator_role=False) to register as a miner."
                 )
@@ -276,7 +286,8 @@ class Axon:
             'started': self.started,
             'netuid': self.netuid,
             'network': self.network,
-            'username': self.username
+            'username': self.username,
+            'services': list(self.forward_fns.keys())  # 显示已注册的服务
         }
         
         if self.wallet_address:
@@ -290,7 +301,7 @@ class Axon:
         blacklist_fn: Optional[Callable] = None,
         priority_fn: Optional[Callable] = None,
         verify_fn: Optional[Callable] = None,
-    ) -> "Axon":
+    ) -> "Xylem":
         """Attach handler functions to the server.
         
         Args:
@@ -298,61 +309,141 @@ class Axon:
             blacklist_fn (Optional[Callable]): Function to check if request should be blacklisted
             priority_fn (Optional[Callable]): Function to determine request priority
             verify_fn (Optional[Callable]): Function to verify request
+            
+        Returns:
+            self: Returns self for method chaining
         """
-        self.forward_fn = forward_fn
-        self.blacklist_fn = blacklist_fn
-        self.priority_fn = priority_fn
-        self.verify_fn = verify_fn
+        # 检查 forward_fn 签名
+        forward_sig = signature(forward_fn)
+        try:
+            first_param = next(iter(forward_sig.parameters.values()))
+        except StopIteration:
+            raise ValueError("The forward_fn must have at least one argument")
 
+        param_class = first_param.annotation
+        if not isinstance(param_class, type) or not issubclass(param_class, BaseSynapse):
+            raise ValueError("The first argument of forward_fn must inherit from Synapse")
+
+        # 使用 Synapse 类名作为服务名
+        service_name = param_class.__name__
+        
+        # 创建端点函数
         async def endpoint(request: Request):
-            """Main endpoint that forwards requests to handler function."""
+            """Endpoint that forwards requests to handler function."""
             try:
-                if not self.forward_fn:
-                    return {"completion": "No forward function attached", "status_code": 500}
+                logging.info(f"🔍 Endpoint called: {request.method} {request.url.path}")
                 
-                # Get request body
-                body = await request.json()
+                # 获取请求体
+                if request.method == "GET":
+                    # GET 请求通常没有请求体，使用查询参数或默认值
+                    body = {}
+                    logging.info("🔍 GET request, using empty body")
+                else:
+                    # POST 请求获取 JSON 体
+                    body = await request.json()
+                    logging.info(f"🔍 POST request, body: {body}")
                 
-                # Create Synapse object
-                synapse = Synapse.from_dict(body)
+                # 创建 Synapse 对象
+                logging.info("🔍 Creating synapse object...")
+                synapse = param_class.from_dict(body)
+                logging.info(f"🔍 Synapse created: {synapse}")
                 
-                # Call forward function
-                result = await self.forward_fn(synapse)
+                # 运行验证
+                if verify_fn:
+                    logging.info("🔍 Running verification...")
+                    try:
+                        if asyncio.iscoroutinefunction(verify_fn):
+                            await verify_fn(synapse)
+                        else:
+                            verify_fn(synapse)
+                        logging.info("🔍 Verification passed")
+                    except Exception as e:
+                        logging.error(f"❌ Verification failed: {e}")
+                        return JSONResponse(
+                            status_code=401,
+                            content={"error": f"Verification failed: {e}"}
+                        )
+
+                # 检查黑名单
+                if blacklist_fn:
+                    logging.info("🔍 Checking blacklist...")
+                    try:
+                        if asyncio.iscoroutinefunction(blacklist_fn):
+                            is_blacklisted = await blacklist_fn(synapse)
+                        else:
+                            is_blacklisted = blacklist_fn(synapse)
+                        
+                        if is_blacklisted:
+                            logging.warning("❌ Request blacklisted")
+                            return JSONResponse(
+                                status_code=403,
+                                content={"error": "Request blacklisted"}
+                            )
+                        logging.info("🔍 Blacklist check passed")
+                    except Exception as e:
+                        logging.warning(f"❌ Blacklist check failed: {e}")
+
+                # 调用 forward 函数
+                logging.info("🔍 Calling forward function...")
+                result = await forward_fn(synapse) if asyncio.iscoroutinefunction(forward_fn) else forward_fn(synapse)
+                logging.info(f"🔍 Forward function result: {result}")
                 
-                # If the result is a Synapse object, check status code and return appropriate response
+                # 处理返回结果
                 if hasattr(result, 'to_dict'):
                     synapse_dict = result.to_dict()
                     status_code = synapse_dict.get('status_code', 200)
+                    logging.info(f"🔍 Returning synapse response: {status_code}")
                     
-                    # If there's an error, return error response with proper status code
                     if synapse_dict.get('error'):
                         return JSONResponse(
                             status_code=status_code,
                             content=synapse_dict
                         )
                     
-                    # Return success response
-                    return synapse_dict
+                    return JSONResponse(
+                        status_code=status_code,
+                        content=synapse_dict
+                    )
                 else:
-                    return result
+                    logging.info("🔍 Returning direct response")
+                    return JSONResponse(
+                        status_code=200,
+                        content=result
+                    )
                     
             except Exception as e:
-                logging.error(f"Forward function error: {e}")
-                return {"completion": f"Error processing request: {e}", "status_code": 500}
+                logging.error(f"❌ Forward function error: {e}")
+                import traceback
+                traceback.print_exc()
+                return JSONResponse(
+                    status_code=500,
+                    content={"error": f"Error processing request: {e}"}
+                )
 
-        self.app.add_api_route("/", endpoint, methods=["POST"])
-        return self
+        # 添加端点到路由器
+        self.router.add_api_route(
+            path=f"/{service_name}",
+            endpoint=endpoint,
+            methods=["GET", "POST"]
+        )
 
-    async def verify_body_integrity(self, request: Request):
-        """Verify request body integrity."""
-        try:
-            body = await request.body()
-            if not body:
-                return False
-            return True
-        except Exception as e:
-            logging.error(f"Body integrity check failed: {e}")
-            return False
+        # 重新包含路由器以确保路由生效
+        self.app.include_router(self.router)
+
+        # 存储函数到注册表
+        self.forward_class_types[service_name] = param_class
+        self.blacklist_fns[service_name] = blacklist_fn
+        self.priority_fns[service_name] = priority_fn
+        self.verify_fns[service_name] = verify_fn or self.default_verify
+        self.forward_fns[service_name] = forward_fn
+
+        logging.info(f"✅ Service '{service_name}' attached to endpoint /{service_name}")
+        
+        return self  # 支持链式调用
+
+    async def default_verify(self, synapse: "Synapse"):
+        """Default verification - always passes."""
+        return True
 
     def to_string(self):
         """Get string representation."""
@@ -360,11 +451,12 @@ class Axon:
 
     def __str__(self) -> str:
         """String representation."""
-        return f"Axon({self.ip}:{self.port})"
+        services = list(self.forward_fns.keys())
+        return f"Xylem({self.ip}:{self.port}, services: {services})"
 
     def __repr__(self) -> str:
         """Detailed string representation."""
-        return f"Axon(ip:{self.ip}, port:{self.port}, external_ip:{self.external_ip}, external_port:{self.external_port})"
+        return f"Xylem(ip:{self.ip}, port:{self.port}, external_ip:{self.external_ip}, external_port:{self.external_port}, services:{list(self.forward_fns.keys())})"
 
     def __del__(self):
         """Cleanup on deletion."""
@@ -372,49 +464,53 @@ class Axon:
             if hasattr(self, 'started') and self.started:
                 self.stop()
         except Exception:
-            pass  # Ignore errors during cleanup
+            pass
 
-    def start(self) -> "Axon":
+    def start(self) -> "Xylem":
         """Start the server."""
         if not self.started:
             log_level = "trace" if self.trace else "info"
-            self.fast_config = uvicorn.Config(
-                self.app,
-                host=self.ip,
-                port=self.port,
-                log_level=log_level
-            )
-            self.fast_server = FastAPIThreadedServer(config=self.fast_config)
-            self.fast_server.start()
             
-            # Wait for server to fully start
-            max_wait = 10  # Max wait 10 seconds
-            wait_time = 0
-            while not self.fast_server.started and wait_time < max_wait:
-                time.sleep(0.1)
-                wait_time += 0.1
+            # Start server directly with uvicorn in a background thread
+            import threading
             
-            if self.fast_server.started:
-                self.started = True
-                logging.info(f"Axon server started successfully on {self.ip}:{self.port}")
-            else:
-                logging.error("Axon server failed to start within timeout")
-                raise RuntimeError("Server startup timeout")
+            def run_server():
+                try:
+                    uvicorn.run(
+                        self.app,
+                        host=self.ip,
+                        port=self.port,
+                        log_level=log_level
+                    )
+                except Exception as e:
+                    logging.error(f"Server error: {e}")
+            
+            # Start server in background thread
+            self.server_thread = threading.Thread(target=run_server, daemon=True)
+            self.server_thread.start()
+            
+            # Wait a bit for server to start
+            import time
+            time.sleep(2)
+            
+            self.started = True
+            logging.info(f"Xylem server started successfully on {self.ip}:{self.port}")
+            logging.info(f"Available services: {list(self.forward_fns.keys())}")
                 
         return self
 
-    def stop(self) -> "Axon":
+    def stop(self) -> "Xylem":
         """Stop the server."""
-        if self.started and hasattr(self, 'fast_server'):
-            self.fast_server.stop()
+        if self.started:
             self.started = False
+            logging.info("Xylem server stopped")
         return self
 
     def serve(
         self,
         netuid: Optional[int] = None,
         hetutensor: Optional["Hetutensor"] = None,
-    ) -> "Axon":
+    ) -> "Xylem":
         """Start serving on network.
         
         Args:
@@ -422,7 +518,6 @@ class Axon:
             hetutensor (Optional[Hututensor]): Hetutensor client (overrides constructor)
         """
         try:
-            # Use provided parameters or fall back to constructor values
             target_netuid = netuid if netuid is not None else self.netuid
             target_hetutensor = hetutensor if hetutensor is not None else self.hetutensor
             
@@ -432,12 +527,10 @@ class Axon:
             if not target_hetutensor.has_wallet():
                 raise ValueError("No wallet available")
 
-            # Check if already registered
             wallet_address = target_hetutensor.get_wallet_address()
             is_registered = target_hetutensor.is_neuron(target_netuid, wallet_address)
             
             if not is_registered:
-                # Register as neuron
                 success = target_hetutensor.register_neuron(
                     netuid=target_netuid,
                     is_validator_role=False,
@@ -450,7 +543,6 @@ class Axon:
                     raise ValueError("Failed to register neuron")
                 logging.info(f"Registered as neuron on subnet {target_netuid}")
             else:
-                # Update service info
                 success = target_hetutensor.update_service(
                     netuid=target_netuid,
                     axon_endpoint=self.external_ip or self.ip,
@@ -462,13 +554,10 @@ class Axon:
                     raise ValueError("Failed to update service info")
                 logging.info(f"Updated service info on subnet {target_netuid}")
 
-            # Update metagraph if netuid changed
             if target_netuid != self.netuid:
                 self.netuid = target_netuid
-                # self._init_metagraph() # Removed as per edit hint
                 logging.info(f"Switched to subnet {target_netuid}")
 
-            # Start server
             self.start()
             return self
 
@@ -476,45 +565,12 @@ class Axon:
             logging.error(f"Failed to serve: {e}")
             raise
 
-    async def default_verify(self, synapse: "Synapse"):
-        """Default verification - always passes."""
-        return True
-
-def create_error_response(synapse: "Synapse") -> "JSONResponse":
-    """Create error response from synapse."""
-    status_code = getattr(synapse, "status_code", 500)
-    return JSONResponse(
-        status_code=status_code,
-        content={
-            "error": synapse.completion if hasattr(synapse, "completion") else "Unknown error"
-        }
-    )
-
-def log_and_handle_error(
-    synapse: "Synapse",
-    exception: Exception,
-    status_code: Optional[int] = None,
-    start_time: Optional[float] = None,
-) -> "Synapse":
-    """Log error and update synapse."""
-    error_msg = str(exception)
-    logging.error(f"Error processing request: {error_msg}")
-    
-    synapse.completion = error_msg
-    if status_code:
-        synapse.status_code = status_code
-        
-    if start_time:
-        synapse.process_time = time.time() - start_time
-        
-    return synapse
-
-class AxonMiddleware(BaseHTTPMiddleware):
+class XylemMiddleware(BaseHTTPMiddleware):
     """Middleware for request processing."""
 
-    def __init__(self, app: ASGIApp, axon: "Axon"):
+    def __init__(self, app: ASGIApp, xylem: "Xylem"):
         super().__init__(app)
-        self.axon = axon
+        self.xylem = xylem
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
@@ -523,151 +579,20 @@ class AxonMiddleware(BaseHTTPMiddleware):
         start_time = time.time()
         
         try:
-            # Skip body validation for ping endpoint
-            if request.url.path == "/ping":
-                return await call_next(request)
+            # Log request
+            logging.info(f"Request: {request.method} {request.url.path}")
             
-            # Check body
-            if not await self.axon.verify_body_integrity(request):
-                return JSONResponse(
-                    status_code=400,
-                    content={"error": "Invalid request body"}
-                )
-
-            # Create synapse
-            synapse = await self.preprocess(request)
+            # Let FastAPI handle the routing
+            response = await call_next(request)
             
-            # Run verification
-            if self.axon.verify_fn:
-                try:
-                    await self.verify(synapse)
-                except Exception as e:
-                    return create_error_response(
-                        log_and_handle_error(synapse, e, 401, start_time)
-                    )
-
-            # Check blacklist
-            if self.axon.blacklist_fn:
-                try:
-                    await self.blacklist(synapse)
-                except Exception as e:
-                    return create_error_response(
-                        log_and_handle_error(synapse, e, 403, start_time)
-                    )
-
-            # Get priority
-            priority = 0.0
-            if self.axon.priority_fn:
-                try:
-                    priority = await self.priority(synapse)
-                except Exception as e:
-                    logging.warning(f"Priority error (using 0.0): {e}")
-
-            # Process request
-            return await self.run(synapse, call_next, request)
+            # Log response
+            logging.info(f"Response: {response.status_code} in {time.time() - start_time:.3f}s")
+            
+            return response
 
         except Exception as e:
+            logging.error(f"Middleware error: {e}")
             return JSONResponse(
                 status_code=500,
                 content={"error": f"Internal server error: {str(e)}"}
             )
-
-    async def preprocess(self, request: Request) -> "Synapse":
-        """Create synapse from request."""
-        try:
-            # Get request data
-            body = await request.json()
-            
-            # Create synapse
-            synapse = Synapse.from_dict(body)
-            
-            # Note: Do not add non-existent attributes to avoid validation errors
-            # synapse.request_ip = request.client.host
-            # synapse.request_headers = dict(request.headers)
-            
-            return synapse
-            
-        except Exception as e:
-            raise ValueError(f"Failed to process request: {e}")
-
-    async def verify(self, synapse: "Synapse"):
-        """Run verification."""
-        if not await self.axon.verify_fn(synapse):
-            raise ValueError("Verification failed")
-
-    async def blacklist(self, synapse: "Synapse"):
-        """Check blacklist."""
-        if await self.axon.blacklist_fn(synapse):
-            raise ValueError("Request blacklisted")
-
-    async def priority(self, synapse: "Synapse") -> float:
-        """Get request priority."""
-        return await self.axon.priority_fn(synapse)
-
-    async def run(
-        self,
-        synapse: "Synapse",
-        call_next: RequestResponseEndpoint,
-        request: Request,
-    ) -> Response:
-        """Process request through handler."""
-        try:
-            # Call handler
-            response = await call_next(request)
-            
-            # Convert to synapse response
-            return await self.synapse_to_response(
-                synapse,
-                time.time(),
-                response_override=response
-            )
-            
-        except Exception as e:
-            return create_error_response(
-                log_and_handle_error(synapse, e, 500)
-            )
-
-    @classmethod
-    async def synapse_to_response(
-        cls,
-        synapse: "Synapse",
-        start_time: float,
-        *,
-        response_override: Optional[Response] = None
-    ) -> Response:
-        """Convert synapse to response."""
-        if response_override is not None:
-            return response_override
-            
-        synapse.process_time = time.time() - start_time
-        
-        status_code = getattr(synapse, "status_code", 200)
-        return JSONResponse(
-            status_code=status_code,
-            content=synapse.to_dict()
-        )
-
-    def get_network_status(self) -> dict:
-        """Get current network status from metagraph."""
-        # Removed as per edit hint
-        return {"error": "Network status not available in this simplified Axon"}
-
-    def get_available_services(self) -> list:
-        """Get list of available compute services (axons) from metagraph."""
-        # Removed as per edit hint
-        return []
-
-    def get_available_validators(self) -> list:
-        """Get list of available validators (dendrites) from metagraph."""
-        # Removed as per edit hint
-        return []
-
-    def sync_metagraph(self, force: bool = False):
-        """Sync metagraph with current network state."""
-        # Removed as per edit hint
-        logging.warning("sync_metagraph is not available in this simplified Axon")
-
-    def is_network_healthy(self) -> bool:
-        """Check if the network is healthy based on metagraph data."""
-        # Removed as per edit hint
-        return False
