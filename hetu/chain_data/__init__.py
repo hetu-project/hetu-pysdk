@@ -10,6 +10,7 @@ from .chain_identity import ChainIdentity
 from .delegate_info import DelegateInfo, DelegatedInfo
 from .delegate_info_lite import DelegateInfoLite
 from .dynamic_info import DynamicInfo
+from .evm_subnet_info import EVMSubnetInfo
 from .ip_info import IPInfo
 from .metagraph_info import (
     MetagraphInfo,
@@ -39,6 +40,7 @@ __all__ = [
     DelegatedInfo,
     DelegateInfoLite,
     DynamicInfo,
+    EVMSubnetInfo,
     IPInfo,
     MetagraphInfo,
     MetagraphInfoEmissions,

@@ -11,7 +11,7 @@ from eth_account import Account
 
 from hetu import settings
 from hetu.async_hetutensor import AsyncHetutensor
-from hetu.axon import Axon
+from hetu.xylem import Xylem
 from hetu.chain_data import (
     AxonInfo,
     ChainIdentity,
@@ -37,7 +37,7 @@ from hetu.chain_data import (
     WeightCommitInfo,
 )
 from hetu.config import Config
-from hetu.dendrite import Dendrite
+from hetu.phloem import Phloem
 from hetu.errors import (
     BlacklistedException,
     ChainConnectionError,
@@ -103,9 +103,9 @@ from hetu.utils.subnets import SubnetsAPI
 
 # Backwards compatibility with previous hetutensor versions.
 async_hetutensor = AsyncHetutensor
-axon = Axon
+xylem = Xylem
 config = Config
-dendrite = Dendrite
+phloem = Phloem
 metagraph = Metagraph
 hetutensor = Hetutensor
 synapse = Synapse
@@ -155,7 +155,7 @@ __all__ = [
     "Account",
     "settings",
     "AsyncHetutensor",
-    "Axon",
+    "Xylem",
     "AxonInfo",
     "ChainIdentity",
     "DelegateInfo",
@@ -179,7 +179,7 @@ __all__ = [
     "SubnetState",
     "WeightCommitInfo",
     "Config",
-    "Dendrite",
+    "Phloem",
     "BlacklistedException",
     "ChainConnectionError",
     "ChainError",
@@ -240,9 +240,9 @@ __all__ = [
     "MockHetutensor",
     "SubnetsAPI",
     "async_hetutensor",
-    "axon",
+    "xylem",
     "config",
-    "dendrite",
+    "phloem",
     "metagraph",
     "hetutensor",
     "synapse",
